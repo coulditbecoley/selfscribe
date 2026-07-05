@@ -38,8 +38,18 @@ def transcribe_clip(clip: Clip, cfg: Config) -> Transcript:
 
 
 def clean_text(text: str, cfg: Config, target: str) -> str:
-    """Optional cleanup pass; no-op until SS-12 lands a backend."""
-    return text
+    """Cleanup pass for targets that want it; raw text on any failure —
+    pasting the uncleaned transcript beats pasting nothing."""
+    from selfscribe.cleanup import get_cleaner
+
+    cleaner = get_cleaner(cfg)
+    if cleaner is None:
+        return text
+    try:
+        return cleaner(text)
+    except Exception as exc:
+        log.warning("[%s] cleanup failed (%s) — injecting raw transcript", target, exc)
+        return text
 
 
 def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> str | None:
