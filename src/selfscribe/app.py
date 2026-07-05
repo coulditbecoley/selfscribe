@@ -31,10 +31,10 @@ def soft_cue() -> None:
 
 
 def transcribe_clip(clip: Clip, cfg: Config) -> Transcript:
-    """Route to the configured STT backend (registry grows in SS-8/9)."""
-    from selfscribe.stt.groq import transcribe
+    """Route to the configured STT backend."""
+    from selfscribe.stt import get_transcriber
 
-    return transcribe(clip, cfg.groq_api_key, initial_prompt=", ".join(cfg.vocab))
+    return get_transcriber(cfg)(clip)
 
 
 def clean_text(text: str, cfg: Config, target: str) -> str:
@@ -54,6 +54,9 @@ def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> st
         text = clean_text(text, cfg, target)
     inject(text, press_enter=(target == "send"))
     log.info("[%s] %.0fms %s: %r", target, transcript.ms, transcript.backend, text)
+    from selfscribe.telemetry import record_utterance
+
+    record_utterance(transcript.backend, transcript.ms, len(text), target)
     return text
 
 
