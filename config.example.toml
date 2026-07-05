@@ -1,0 +1,42 @@
+# SelfScribe config — copy to %USERPROFILE%\.selfscribe\config.toml
+# Everything except [keys].groq is optional; the values below are the defaults.
+
+[keys]
+groq = "gsk_..."        # required unless [stt].backend = "local" (env GROQ_API_KEY also works)
+# anthropic = "sk-ant-..."  # only needed when [cleanup].backend = "haiku" (env ANTHROPIC_API_KEY also works)
+
+[hotkeys]
+dictate = "ctrl+windows"          # speak -> text at cursor (cleanup per [cleanup].dictate)
+dictate_send = "ctrl+alt+windows" # speak -> raw text at cursor -> Enter (Claude Code hands-free)
+mode = "hold"                     # "hold" = push-to-talk; "toggle" = press to start/stop
+
+[stt]
+backend = "groq"        # "groq" (fast, ~cents/hr) | "local" (faster-whisper: free, offline)
+local_model = "base.en" # faster-whisper model when backend = "local"
+
+[cleanup]
+backend = "off"         # "haiku" | "ollama" | "off" — engine for the cleanup pass
+dictate = true          # clean the general dictate path (email/docs)
+send = false            # keep the Claude Code send path RAW (faster; an LLM doesn't care)
+override = ""           # "" | "on" | "off" — force cleanup on/off for every target
+ollama_model = "llama3.2:1b"
+ollama_url = "http://localhost:11434"
+
+[vocab]
+# Proper nouns seeded into Whisper's initial_prompt AND repaired after
+# transcription (case/spacing match + edit-distance-1 on Capitalized words),
+# so they come back in exactly this casing. Keep the list short and personal.
+terms = [
+    "Skald",
+    "HitHQ",
+    "HitList",
+    "SelfScribe",
+    "Coley",
+    "Fenrir",
+    "Obsidian",
+    "Claude Code",
+]
+# Fuzzy repair rewrites Capitalized words within edit-distance 1 of a term
+# (fixes 'Cooley' -> 'Coley'); a rare real near-miss name (e.g. 'Corey')
+# would also be rewritten. Set false to only repair exact case/spacing.
+fuzzy = true
