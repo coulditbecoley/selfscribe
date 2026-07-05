@@ -1,8 +1,22 @@
-"""Cleanup via a local Ollama model — fully offline, $0 marginal cost."""
+"""Cleanup via a local Ollama model — fully offline, $0 marginal cost.
+
+Small local models follow demonstrations better than rules, so the request
+carries a one-shot example of the contract (filler out, wording preserved).
+"""
 
 import httpx
 
 from selfscribe.cleanup import SYSTEM_PROMPT, CleanupError
+
+EXAMPLE_IN = "um so I think we should uh probably ship it on like tuesday you know"
+EXAMPLE_OUT = "I think we should probably ship it on Tuesday."
+
+
+def _strip_enclosing_quotes(text: str) -> str:
+    for quote in ('"', "'", "“”"):
+        if len(text) > 1 and text[0] in quote[0] and text[-1] in quote[-1]:
+            return text[1:-1].strip()
+    return text
 
 
 def clean(text: str, base_url: str, model: str, timeout_s: float = 60.0) -> str:
@@ -15,6 +29,8 @@ def clean(text: str, base_url: str, model: str, timeout_s: float = 60.0) -> str:
                 "options": {"temperature": 0.0},
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": EXAMPLE_IN},
+                    {"role": "assistant", "content": EXAMPLE_OUT},
                     {"role": "user", "content": text},
                 ],
             },
@@ -29,4 +45,4 @@ def clean(text: str, base_url: str, model: str, timeout_s: float = 60.0) -> str:
     cleaned = response.json().get("message", {}).get("content", "").strip()
     if not cleaned:
         raise CleanupError("Ollama cleanup returned empty text.")
-    return cleaned
+    return _strip_enclosing_quotes(cleaned)

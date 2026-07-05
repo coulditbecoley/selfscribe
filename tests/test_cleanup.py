@@ -106,6 +106,57 @@ def test_live_haiku_cleans_filler_faithfully():
 
 
 @pytest.mark.live
+def test_live_ollama_cleanup_quality_and_locality(tts_wav):
+    """SS-13 AC: backend=local + cleanup=ollama runs entirely on this machine
+    (loopback-only sockets) and produces sane cleaned text."""
+    import socket
+
+    from selfscribe.audio import clip_from_wav_bytes
+    from selfscribe.config import load_config
+    from selfscribe.stt import get_transcriber
+    from selfscribe.stt.local import _get_model
+
+    cfg = load_config()
+    cfg.stt_backend = "local"
+    cfg.cleanup_backend = "ollama"
+    try:
+        probe = ollama_clean("hello world test", cfg.ollama_url, cfg.ollama_model, timeout_s=90)
+    except CleanupError as exc:
+        pytest.skip(f"ollama unavailable: {exc}")
+    assert probe
+
+    _get_model(cfg.local_model)  # warm whisper cache before cutting the network
+
+    real_connect = socket.socket.connect
+
+    def loopback_only(self, address):
+        host = address[0] if isinstance(address, tuple) else str(address)
+        if host not in ("127.0.0.1", "::1", "localhost"):
+            raise AssertionError(f"non-local connection attempted: {address}")
+        return real_connect(self, address)
+
+    socket.socket.connect = loopback_only
+    try:
+        clip = clip_from_wav_bytes(
+            tts_wav(
+                "um so like can you send the report to the team by friday", "cleanup_filler"
+            ).read_bytes()
+        )
+        transcript = get_transcriber(cfg)(clip)
+        cleaned = get_cleaner(cfg)(transcript.text)
+    finally:
+        socket.socket.connect = real_connect
+
+    print(f"\nlocal transcript: {transcript.text!r}")
+    print(f"ollama cleaned:  {cleaned!r}")
+    assert "send the report" in cleaned.lower()
+    assert "friday" in cleaned.lower()
+    low = f" {cleaned.lower()} "
+    for filler in (" um ", " uh "):
+        assert filler not in low
+
+
+@pytest.mark.live
 def test_live_haiku_punctuates_question_without_answering():
     """SS-12 AC: a dictated question is punctuated, NOT answered."""
     from selfscribe.config import load_config
