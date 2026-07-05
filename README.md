@@ -80,6 +80,26 @@ Fully-offline private mode: `backend = "local"` + `[cleanup].backend =
 Add your names/terms to `[vocab].terms`. They are fed to Whisper as context
 and enforced afterward, so they transcribe in exactly the casing you wrote.
 
+## Dictation commands
+
+On the general **dictate** path (not the Claude Code send path), spoken
+phrases become document structure:
+
+| Say | You get |
+| --- | --- |
+| "new line" | a line break |
+| "new paragraph" | a blank line |
+| "scratch that" | deletes the current line back to its last break |
+| "code block" … "end code block" | a fenced ```` ``` ```` block |
+
+Structural only by design — no "period"/"comma" word commands, which collide
+with ordinary speech (the cleanup pass handles punctuation). Turn it off with
+`[commands].enabled = false`. The send path never runs commands, so a spoken
+"new line" there is just literal words and can't submit your prompt early.
+Commands are also suppressed when a **terminal** has focus — a newline pasted
+into a shell would submit that line, so dictate structure only takes effect in
+text fields (use the send path for terminals).
+
 ## Start at login (optional)
 
 ```powershell

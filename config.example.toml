@@ -40,3 +40,14 @@ terms = [
 # (fixes 'Cooley' -> 'Coley'); a rare real near-miss name (e.g. 'Corey')
 # would also be rewritten. Set false to only repair exact case/spacing.
 fuzzy = true
+
+[commands]
+# Structural dictation commands on the general dictate path (never the
+# Claude Code send path). Say the phrase and it becomes document structure:
+#   "new line"        -> line break
+#   "new paragraph"   -> blank line
+#   "scratch that"    -> delete the current line back to its last break
+#   "code block" ... "end code block" -> fenced ``` block
+# Structural only by design — no "period"/"comma" word commands (they collide
+# with ordinary speech; let the cleanup pass handle punctuation).
+enabled = true

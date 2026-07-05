@@ -84,6 +84,64 @@ def test_cleaned_text_gets_vocab_repair(clip, monkeypatch):
     assert calls == [("Open HitList now.", False)]
 
 
+def test_dictate_path_applies_structural_commands(clip, monkeypatch):
+    monkeypatch.setattr(app_module, "is_terminal_focused", lambda: False)
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="first line new line second line", ms=1.0, backend="groq"),
+    )
+    calls = []
+    process_clip(clip, "dictate", Config(groq_api_key="k"), inject=make_inject(calls))
+    assert calls == [("first line\nsecond line", False)]
+
+
+def test_send_path_never_applies_commands(clip, monkeypatch):
+    """Claude Code path stays raw + single-line: 'new line' is literal words,
+    and it never gains a newline that would submit early."""
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="run tests new line then build", ms=1.0, backend="groq"),
+    )
+    calls = []
+    process_clip(clip, "send", Config(groq_api_key="k"), inject=make_inject(calls))
+    text, press_enter = calls[0]
+    assert "\n" not in text
+    assert text == "run tests new line then build"
+    assert press_enter is True
+
+
+def test_dictate_commands_suppressed_when_terminal_focused(clip, monkeypatch):
+    """A newline pasted into a terminal submits that line; the dictate path is
+    for text fields, so command newlines are suppressed when a terminal has
+    focus (also blocks a compromised STT emitting 'new line')."""
+    monkeypatch.setattr(app_module, "is_terminal_focused", lambda: True)
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="rm files new line ok", ms=1.0, backend="groq"),
+    )
+    calls = []
+    process_clip(clip, "dictate", Config(groq_api_key="k"), inject=make_inject(calls))
+    text, _ = calls[0]
+    assert "\n" not in text  # stays a single line in a terminal
+    assert text == "rm files new line ok"
+
+
+def test_commands_can_be_disabled(clip, monkeypatch):
+    monkeypatch.setattr(app_module, "is_terminal_focused", lambda: False)
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="a new line b", ms=1.0, backend="groq"),
+    )
+    calls = []
+    process_clip(clip, "dictate", Config(groq_api_key="k", commands_enabled=False),
+                 inject=make_inject(calls))
+    assert calls == [("a new line b", False)]
+
+
 def test_fake_recorder_goes_through_real_finish(tts_wav, tmp_path):
     """--fake-audio clips get the same trim/guard semantics as real ones."""
     import numpy as np
