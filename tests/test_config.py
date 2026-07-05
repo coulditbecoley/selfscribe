@@ -24,6 +24,12 @@ def test_minimal_config_gets_sane_defaults(tmp_path):
     assert cfg.cleanup_enabled("dictate") is False  # backend off => no cleanup anywhere
     assert cfg.cleanup_enabled("send") is False
     assert "SelfScribe" in cfg.vocab
+    assert cfg.commands_enabled is True
+
+
+def test_commands_can_be_disabled_via_config(tmp_path):
+    cfg = load_config(write(tmp_path, '[keys]\ngroq="g"\n\n[commands]\nenabled = false\n'))
+    assert cfg.commands_enabled is False
 
 
 def test_missing_groq_key_is_one_line_error(tmp_path):

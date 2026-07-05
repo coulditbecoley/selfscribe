@@ -87,6 +87,16 @@ def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> st
         log.info("transcript was all control characters — nothing to inject")
         soft_cue()
         return None
+    # Structural dictation commands run AFTER sanitization and only on the
+    # dictate path: the only newlines that can reach the clipboard come from
+    # recognized command phrases, and the send path stays raw + single-line.
+    if target == "dictate" and cfg.commands_enabled:
+        from selfscribe.commands import apply_commands
+
+        text = apply_commands(text)
+        if not text:
+            soft_cue()
+            return None
     inject(text, press_enter=(target == "send"))
     log.info("[%s] %.0fms %s: %r", target, transcript.ms, transcript.backend, text)
     from selfscribe.telemetry import record_utterance
