@@ -32,6 +32,23 @@ def test_commands_can_be_disabled_via_config(tmp_path):
     assert cfg.commands_enabled is False
 
 
+def test_per_app_cleanup_profiles_parsed(tmp_path):
+    text = (
+        '[keys]\ngroq="g"\nanthropic="a"\n\n'
+        '[cleanup]\nbackend = "haiku"\n\n'
+        '[cleanup.apps]\n"Code.exe" = false\n"OUTLOOK.EXE" = true\n'
+    )
+    cfg = load_config(write(tmp_path, text))
+    assert cfg.cleanup_apps == {"code.exe": False, "outlook.exe": True}
+
+
+def test_per_app_non_bool_value_rejected(tmp_path):
+    text = '[keys]\ngroq="g"\n\n[cleanup.apps]\n"code.exe" = "no"\n'
+    with pytest.raises(ConfigError) as exc:
+        load_config(write(tmp_path, text))
+    assert "cleanup.apps" in str(exc.value)
+
+
 def test_missing_groq_key_is_one_line_error(tmp_path):
     with pytest.raises(ConfigError) as exc:
         load_config(write(tmp_path, "[stt]\nbackend = 'groq'\n"))
@@ -59,10 +76,58 @@ def test_haiku_cleanup_requires_anthropic_key(tmp_path):
     assert "Anthropic" in str(exc.value)
 
 
+def test_haiku_key_required_when_only_a_per_app_profile_enables_cleanup(tmp_path):
+    # both targets off, but a per-app profile turns cleanup on -> key required
+    text = (
+        '[keys]\ngroq="g"\n\n'
+        '[cleanup]\nbackend = "haiku"\ndictate = false\nsend = false\n\n'
+        '[cleanup.apps]\n"slack.exe" = true\n'
+    )
+    with pytest.raises(ConfigError) as exc:
+        load_config(write(tmp_path, text))
+    assert "Anthropic" in str(exc.value)
+
+
+def test_haiku_key_not_required_when_all_per_app_profiles_off(tmp_path):
+    text = (
+        '[keys]\ngroq="g"\n\n'
+        '[cleanup]\nbackend = "haiku"\ndictate = false\nsend = false\n\n'
+        '[cleanup.apps]\n"code.exe" = false\n'
+    )
+    cfg = load_config(write(tmp_path, text))  # no key, but cleanup never fires
+    assert cfg.cleanup_backend == "haiku"
+
+
 def test_per_target_cleanup_defaults():
     cfg = Config(cleanup_backend="haiku", anthropic_api_key="k")
     assert cfg.cleanup_enabled("dictate") is True  # docs/email path cleans
     assert cfg.cleanup_enabled("send") is False  # Claude Code path stays raw
+
+
+def test_per_app_overrides_per_target():
+    cfg = Config(cleanup_backend="haiku", cleanup_apps={"code.exe": False, "slack.exe": True})
+    # editor: per-app forces cleanup OFF even though dictate default is ON
+    assert cfg.cleanup_enabled("dictate", app="Code.exe") is False
+    # slack: per-app forces cleanup ON even on the send target (default OFF)
+    assert cfg.cleanup_enabled("send", app="slack.exe") is True
+    # unmapped app falls back to the per-target default
+    assert cfg.cleanup_enabled("dictate", app="notepad.exe") is True
+    assert cfg.cleanup_enabled("send", app="notepad.exe") is False
+
+
+def test_tray_override_beats_per_app():
+    cfg = Config(cleanup_backend="haiku", cleanup_override="off", cleanup_apps={"slack.exe": True})
+    assert cfg.cleanup_enabled("dictate", app="slack.exe") is False
+
+
+def test_backend_off_beats_per_app():
+    cfg = Config(cleanup_backend="off", cleanup_apps={"slack.exe": True})
+    assert cfg.cleanup_enabled("dictate", app="slack.exe") is False
+
+
+def test_per_app_lookup_is_case_insensitive():
+    cfg = Config(cleanup_backend="haiku", cleanup_apps={"code.exe": False})
+    assert cfg.cleanup_enabled("dictate", app="CODE.EXE") is False
 
 
 def test_cleanup_global_override():

@@ -75,6 +75,19 @@ Claude Code prompt fires hands-free.
 Fully-offline private mode: `backend = "local"` + `[cleanup].backend =
 "ollama"` (install [Ollama](https://ollama.com), `ollama pull llama3.2:1b`).
 
+### Per-app cleanup profiles
+
+Override the per-target cleanup default based on which application has focus,
+by process name in `[cleanup.apps]`:
+
+```toml
+[cleanup.apps]
+"code.exe" = false      # editor: keep dictation raw
+"outlook.exe" = true    # email: clean it up
+```
+
+Precedence: backend-off → tray override → per-app → per-target.
+
 ## Custom vocabulary
 
 Add your names/terms to `[vocab].terms`. They are fed to Whisper as context

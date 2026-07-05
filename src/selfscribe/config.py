@@ -44,6 +44,7 @@ class Config:
     cleanup_dictate: bool = True
     cleanup_send: bool = False
     cleanup_override: str = ""  # "" | "on" | "off"
+    cleanup_apps: dict[str, bool] = field(default_factory=dict)  # process name -> on/off
     ollama_model: str = "llama3.2:1b"
     ollama_url: str = "http://localhost:11434"
 
@@ -54,19 +55,39 @@ class Config:
 
     source_path: Path | None = None
 
-    def cleanup_enabled(self, target: str) -> bool:
-        """Is the cleanup pass active for a given target ('dictate' | 'send')?"""
+    def cleanup_enabled(self, target: str, app: str | None = None) -> bool:
+        """Is the cleanup pass active for a target ('dictate' | 'send'), given
+        the focused app's process name?
+
+        Precedence: backend-off > tray override > per-app profile > per-target
+        default. A per-app entry (e.g. code.exe = false) overrides the target
+        default only for that focused application.
+        """
         if self.cleanup_backend == "off":
             return False
         if self.cleanup_override == "on":
             return True
         if self.cleanup_override == "off":
             return False
+        if app:
+            app_choice = self.cleanup_apps.get(app.lower())
+            if app_choice is not None:
+                return app_choice
         if target == "dictate":
             return self.cleanup_dictate
         if target == "send":
             return self.cleanup_send
         raise ValueError(f"unknown cleanup target: {target!r}")
+
+
+def cleanup_possible(cfg: "Config") -> bool:
+    """Could the cleanup pass fire for any target/focused-app combination?
+    Accounts for per-target defaults, per-app profiles, and the override."""
+    return any(
+        cfg.cleanup_enabled(target, app)
+        for target in ("dictate", "send")
+        for app in (None, *cfg.cleanup_apps)
+    )
 
 
 def _get(table: dict, section: str, key: str, expected: type, path: Path):
@@ -116,6 +137,17 @@ def load_config(path: Path | None = None) -> Config:
         if value is not None:
             setattr(cfg, attr, value)
 
+    apps = raw.get("cleanup", {}).get("apps")
+    if apps is not None:
+        if not isinstance(apps, dict):
+            raise ConfigError(f"Config error: [cleanup.apps] must be a table in {path}")
+        for name, on in apps.items():
+            if not isinstance(on, bool):
+                raise ConfigError(
+                    f"Config error: [cleanup.apps].\"{name}\" must be true or false in {path}"
+                )
+            cfg.cleanup_apps[name.lower()] = on
+
     _validate(cfg, path)
     return cfg
 
@@ -141,9 +173,7 @@ def _validate(cfg: Config, path: Path) -> None:
             f"Missing Groq API key: set [keys].groq in {path} (or GROQ_API_KEY), "
             "or switch [stt].backend to 'local'."
         )
-    cleanup_in_use = cfg.cleanup_backend == "haiku" and (
-        cfg.cleanup_enabled("dictate") or cfg.cleanup_enabled("send")
-    )
+    cleanup_in_use = cfg.cleanup_backend == "haiku" and cleanup_possible(cfg)
     if cleanup_in_use and not cfg.anthropic_api_key:
         raise ConfigError(
             f"Missing Anthropic API key: set [keys].anthropic in {path} (or ANTHROPIC_API_KEY), "

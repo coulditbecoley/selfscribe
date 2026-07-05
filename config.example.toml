@@ -22,6 +22,14 @@ override = ""           # "" | "on" | "off" — force cleanup on/off for every t
 ollama_model = "llama3.2:1b"
 ollama_url = "http://localhost:11434"
 
+# Per-app cleanup profiles: override the per-target default based on which
+# application has focus (process name, case-insensitive). Precedence:
+# backend-off > override > per-app > per-target.
+[cleanup.apps]
+# "code.exe" = false      # editor: keep dictation raw
+# "outlook.exe" = true    # email: clean it up
+# "slack.exe" = true
+
 [vocab]
 # Proper nouns seeded into Whisper's initial_prompt AND repaired after
 # transcription (case/spacing match + edit-distance-1 on Capitalized words),

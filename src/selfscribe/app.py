@@ -14,7 +14,7 @@ import time
 from selfscribe.audio import Clip, Recorder
 from selfscribe.config import Config, ConfigError, load_config
 from selfscribe.hotkeys import HotkeyListener
-from selfscribe.inject import inject_text, is_terminal_focused
+from selfscribe.inject import foreground_process_name, inject_text, is_terminal_focused
 from selfscribe.stt import Transcript, TranscriptionError
 
 log = logging.getLogger("selfscribe")
@@ -76,7 +76,8 @@ def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> st
         log.info("empty transcript (%.0fms) — nothing to inject", transcript.ms)
         soft_cue()
         return None
-    if cfg.cleanup_enabled(target):
+    focused_app = foreground_process_name()
+    if cfg.cleanup_enabled(target, app=focused_app):
         text = clean_text(text, cfg, target)
         from selfscribe.stt import apply_vocab_fixes
 

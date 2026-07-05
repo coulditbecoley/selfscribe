@@ -15,5 +15,16 @@ def test_cleanup_check_matches_runtime_semantics(capsys):
     assert "anthropic" in (out.out + out.err)
 
 
+def test_cleanup_check_accounts_for_per_app_profiles(capsys):
+    # both targets off but a per-app profile enables cleanup -> key required
+    cfg = Config(cleanup_backend="haiku", cleanup_dictate=False, cleanup_send=False,
+                 cleanup_apps={"slack.exe": True})
+    assert check_cleanup(cfg) is False
+    # per-app profile only turns things off -> no key needed, check passes
+    cfg = Config(cleanup_backend="haiku", cleanup_dictate=False, cleanup_send=False,
+                 cleanup_apps={"code.exe": False})
+    assert check_cleanup(cfg) is True
+
+
 def test_vad_check_runs_without_assert():
     assert check_vad() is True
