@@ -75,10 +75,12 @@ def check_stt(cfg: Config) -> bool:
 
 
 def check_cleanup(cfg: Config) -> bool:
+    from selfscribe.config import cleanup_possible
+
     if cfg.cleanup_backend == "off":
         return _line(OK, "cleanup", "off")
-    if not (cfg.cleanup_enabled("dictate") or cfg.cleanup_enabled("send")):
-        return _line(OK, "cleanup", f"{cfg.cleanup_backend} configured but off for both targets")
+    if not cleanup_possible(cfg):
+        return _line(OK, "cleanup", f"{cfg.cleanup_backend} configured but off everywhere")
     if cfg.cleanup_backend == "haiku":
         if cfg.anthropic_api_key:
             return _line(OK, "cleanup", "haiku (key present)")

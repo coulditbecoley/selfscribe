@@ -70,6 +70,42 @@ def test_send_path_stays_raw_even_with_cleanup_backend(clip, injections, monkeyp
     assert injections[-1] == ("CLEANED", False)
 
 
+def test_per_app_profile_forces_cleanup_off(clip, monkeypatch):
+    """Focused app in [cleanup.apps]=false suppresses cleanup even on the
+    dictate path where the default is on."""
+    monkeypatch.setattr(app_module, "foreground_process_name", lambda: "code.exe")
+    monkeypatch.setattr(app_module, "is_terminal_focused", lambda: False)
+    seen = []
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="um so hello", ms=1.0, backend="groq"),
+    )
+    monkeypatch.setattr(app_module, "clean_text", lambda t, cfg, tgt: seen.append(tgt) or "CLEAN")
+    cfg = Config(groq_api_key="k", anthropic_api_key="a", cleanup_backend="haiku",
+                 cleanup_apps={"code.exe": False})
+    calls = []
+    process_clip(clip, "dictate", cfg, inject=make_inject(calls))
+    assert seen == []  # cleanup skipped for the editor
+    assert calls == [("um so hello", False)]
+
+
+def test_per_app_profile_forces_cleanup_on_for_send(clip, monkeypatch):
+    """Focused app mapped true cleans even the send target (default raw)."""
+    monkeypatch.setattr(app_module, "foreground_process_name", lambda: "slack.exe")
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="um hello there", ms=1.0, backend="groq"),
+    )
+    monkeypatch.setattr(app_module, "clean_text", lambda t, cfg, tgt: "cleaned")
+    cfg = Config(groq_api_key="k", anthropic_api_key="a", cleanup_backend="haiku",
+                 cleanup_apps={"slack.exe": True})
+    calls = []
+    process_clip(clip, "send", cfg, inject=make_inject(calls))
+    assert calls == [("cleaned", True)]
+
+
 def test_cleaned_text_gets_vocab_repair(clip, monkeypatch):
     """The cleanup LLM may re-case vocab terms; the final text is repaired."""
     monkeypatch.setattr(
