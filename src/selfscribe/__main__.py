@@ -20,6 +20,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="testing: 'record' this WAV instead of the mic",
     )
+    run_parser.add_argument(
+        "--no-tray",
+        action="store_true",
+        help="run headless without the tray icon",
+    )
     sub.add_parser("check", help="First-run check: config, keys, mic, VAD")
     return parser
 
@@ -30,7 +35,10 @@ def main(argv: list[str] | None = None) -> int:
     if command == "run":
         from selfscribe.app import run
 
-        return run(fake_audio=getattr(args, "fake_audio", None))
+        return run(
+            fake_audio=getattr(args, "fake_audio", None),
+            use_tray=not getattr(args, "no_tray", False),
+        )
     if command == "check":
         from selfscribe.doctor import check
 

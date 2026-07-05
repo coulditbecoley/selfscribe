@@ -74,17 +74,37 @@ class App:
     def __init__(self, cfg: Config, recorder: Recorder | None = None):
         self.cfg = cfg
         self.recorder = recorder or Recorder()
-        self.listener = HotkeyListener(
-            cfg.hotkey_dictate,
-            cfg.hotkey_send,
-            cfg.hotkey_mode,
+        self.on_recording_change: object = None  # Callable[[bool], None]
+        self.listener = self._build_listener(cfg.hotkey_mode)
+
+    def _build_listener(self, mode: str) -> HotkeyListener:
+        return HotkeyListener(
+            self.cfg.hotkey_dictate,
+            self.cfg.hotkey_send,
+            mode,
             on_start=self._on_start,
             on_stop=self._on_stop,
         )
 
+    def set_hotkey_mode(self, mode: str) -> None:
+        """Rebuild the listener in the new mode (tray menu switch)."""
+        self.listener.stop()
+        self.cfg.hotkey_mode = mode
+        self.listener = self._build_listener(mode)
+        self.listener.start()
+        log.info("hotkey mode -> %s", mode)
+
+    def _notify_recording(self, active: bool) -> None:
+        if self.on_recording_change:
+            try:
+                self.on_recording_change(active)
+            except Exception:
+                log.debug("recording indicator update failed", exc_info=True)
+
     def _on_start(self, target: str) -> None:
         try:
             self.recorder.start()
+            self._notify_recording(True)
             log.info("[%s] recording…", target)
         except Exception:
             log.exception("could not start recording")
@@ -97,6 +117,8 @@ class App:
             log.exception("could not stop recording")
             soft_cue()
             return
+        finally:
+            self._notify_recording(False)
         if clip is None:
             log.info("[%s] discarded (%s)", target, self.recorder.discard_reason)
             soft_cue()
@@ -140,7 +162,7 @@ class FakeRecorder(Recorder):
         return clip_from_wav_bytes(Path(self._wav_path).read_bytes())
 
 
-def run(fake_audio: str | None = None) -> int:
+def run(fake_audio: str | None = None, use_tray: bool = True) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
@@ -160,6 +182,20 @@ def run(fake_audio: str | None = None) -> int:
         f"send={cfg.hotkey_send} mode={cfg.hotkey_mode} stt={cfg.stt_backend}",
         flush=True,
     )
+
+    if use_tray:
+        try:
+            from selfscribe.tray import Tray
+
+            tray = Tray(cfg, on_quit=app.stop, on_mode_change=app.set_hotkey_mode)
+            app.on_recording_change = tray.set_recording
+            tray.run()  # blocks until Quit
+            app.stop()
+            print("selfscribe: stopped")
+            return 0
+        except Exception:
+            log.exception("tray unavailable — running headless")
+
     try:
         while True:
             time.sleep(1)
