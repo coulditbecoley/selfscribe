@@ -13,7 +13,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"selfscribe {__version__}")
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("run", help="Start the dictation loop (default)")
+    run_parser = sub.add_parser("run", help="Start the dictation loop (default)")
+    run_parser.add_argument(
+        "--fake-audio",
+        metavar="WAV",
+        default=None,
+        help="testing: 'record' this WAV instead of the mic",
+    )
     sub.add_parser("check", help="First-run check: config, keys, mic, VAD")
     return parser
 
@@ -24,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     if command == "run":
         from selfscribe.app import run
 
-        return run()
+        return run(fake_audio=getattr(args, "fake_audio", None))
     if command == "check":
         from selfscribe.doctor import check
 
