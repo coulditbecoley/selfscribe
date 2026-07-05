@@ -37,6 +37,22 @@ def transcribe_clip(clip: Clip, cfg: Config) -> Transcript:
     return get_transcriber(cfg)(clip)
 
 
+def sanitize_for_injection(text: str) -> str:
+    """Neutralize control characters before the text is pasted and (on the
+    send path) Enter is pressed.
+
+    Injected text goes to the clipboard and is pasted into whatever app has
+    focus — often a terminal. An embedded newline in a terminal paste submits
+    that line, so a multi-line transcript (or a hostile/compromised STT or
+    cleanup response) could run intermediate lines as shell commands. v1
+    dictation is single-line, so newlines/tabs collapse to spaces and other
+    C0/C1 control chars are dropped; the caller decides on Enter separately.
+    """
+    text = text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    cleaned = "".join(ch for ch in text if ch.isprintable())
+    return " ".join(cleaned.split())
+
+
 def clean_text(text: str, cfg: Config, target: str) -> str:
     """Cleanup pass for targets that want it; raw text on any failure —
     pasting the uncleaned transcript beats pasting nothing."""
@@ -66,6 +82,11 @@ def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> st
 
         # the cleanup LLM may re-case vocab terms; repair the final text too
         text = apply_vocab_fixes(text, cfg.vocab, fuzzy=cfg.vocab_fuzzy)
+    text = sanitize_for_injection(text)
+    if not text:
+        log.info("transcript was all control characters — nothing to inject")
+        soft_cue()
+        return None
     inject(text, press_enter=(target == "send"))
     log.info("[%s] %.0fms %s: %r", target, transcript.ms, transcript.backend, text)
     from selfscribe.telemetry import record_utterance

