@@ -85,6 +85,7 @@ def test_cleaned_text_gets_vocab_repair(clip, monkeypatch):
 
 
 def test_dictate_path_applies_structural_commands(clip, monkeypatch):
+    monkeypatch.setattr(app_module, "is_terminal_focused", lambda: False)
     monkeypatch.setattr(
         app_module,
         "transcribe_clip",
@@ -111,7 +112,25 @@ def test_send_path_never_applies_commands(clip, monkeypatch):
     assert press_enter is True
 
 
+def test_dictate_commands_suppressed_when_terminal_focused(clip, monkeypatch):
+    """A newline pasted into a terminal submits that line; the dictate path is
+    for text fields, so command newlines are suppressed when a terminal has
+    focus (also blocks a compromised STT emitting 'new line')."""
+    monkeypatch.setattr(app_module, "is_terminal_focused", lambda: True)
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="rm files new line ok", ms=1.0, backend="groq"),
+    )
+    calls = []
+    process_clip(clip, "dictate", Config(groq_api_key="k"), inject=make_inject(calls))
+    text, _ = calls[0]
+    assert "\n" not in text  # stays a single line in a terminal
+    assert text == "rm files new line ok"
+
+
 def test_commands_can_be_disabled(clip, monkeypatch):
+    monkeypatch.setattr(app_module, "is_terminal_focused", lambda: False)
     monkeypatch.setattr(
         app_module,
         "transcribe_clip",

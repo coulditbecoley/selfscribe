@@ -14,7 +14,7 @@ import time
 from selfscribe.audio import Clip, Recorder
 from selfscribe.config import Config, ConfigError, load_config
 from selfscribe.hotkeys import HotkeyListener
-from selfscribe.inject import inject_text
+from selfscribe.inject import inject_text, is_terminal_focused
 from selfscribe.stt import Transcript, TranscriptionError
 
 log = logging.getLogger("selfscribe")
@@ -88,9 +88,14 @@ def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> st
         soft_cue()
         return None
     # Structural dictation commands run AFTER sanitization and only on the
-    # dictate path: the only newlines that can reach the clipboard come from
-    # recognized command phrases, and the send path stays raw + single-line.
-    if target == "dictate" and cfg.commands_enabled:
+    # dictate path. A newline pasted into a terminal submits that line, and
+    # the command recognizer runs on untrusted STT/cleanup text — so a
+    # terminal focused here would let a hostile response emit "new line" to
+    # gain a line-submit primitive. The dictate path is for text fields, not
+    # terminals (that's the send path's job), so we suppress command-produced
+    # newlines whenever a terminal has focus: closes that vector and avoids
+    # accidentally submitting a partial line into a shell.
+    if target == "dictate" and cfg.commands_enabled and not is_terminal_focused():
         from selfscribe.commands import apply_commands
 
         text = apply_commands(text)

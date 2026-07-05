@@ -23,7 +23,8 @@ FENCE = "```"
 
 
 def _tokenize(text: str) -> list[tuple[str, str]]:
-    """Words and command markers, greedily longest-matching commands."""
+    """(name, literal) events; commands greedily longest-matched. `literal`
+    keeps the original words so an out-of-context command can render verbatim."""
     words = text.split()
     lower = [w.lower() for w in words]
     events: list[tuple[str, str]] = []
@@ -32,7 +33,7 @@ def _tokenize(text: str) -> list[tuple[str, str]]:
         for phrase, name in _COMMANDS:
             end = i + len(phrase)
             if tuple(lower[i:end]) == phrase:
-                events.append((name, ""))
+                events.append((name, " ".join(words[i:end])))
                 i = end
                 break
         else:
@@ -47,9 +48,10 @@ def apply_commands(text: str, enabled: bool = True) -> str:
 
     out: list[str] = []
     current: list[str] = []
-    pending = ""  # separator kind carried to the next appended line
+    pending = ""  # separator carried to the next normal line ("nl" | "para")
     in_code = False
-    code: list[str] = []
+    code_lines: list[str] = []
+    code_current: list[str] = []
 
     def append_line(line: str) -> None:
         nonlocal pending
@@ -63,23 +65,35 @@ def apply_commands(text: str, enabled: bool = True) -> str:
             append_line(" ".join(current))
             current.clear()
 
+    def flush_code_line() -> None:
+        code_lines.append(" ".join(code_current))
+        code_current.clear()
+
     def close_code() -> None:
         nonlocal in_code
-        append_line(" ".join(code) if code else "")
-        append_line(FENCE)
-        code.clear()
+        if code_current:
+            flush_code_line()
+        out.extend(code_lines)  # verbatim; no paragraph logic inside a block
+        out.append(FENCE)
+        code_lines.clear()
         in_code = False
 
-    for name, word in _tokenize(text):
+    for name, literal in _tokenize(text):
         if in_code:
             if name == "END_CODE":
                 close_code()
-            elif name == "WORD":
-                code.append(word)
-            # other structural commands are literal-ish no-ops inside code v1
+            elif name == "NEWLINE":
+                flush_code_line()
+            elif name == "PARAGRAPH":
+                flush_code_line()
+                code_lines.append("")
+            elif name == "SCRATCH":
+                code_current.clear()
+            else:  # WORD or a nested CODE — keep the words as literal code
+                code_current.extend(literal.split())
             continue
         if name == "WORD":
-            current.append(word)
+            current.append(literal)
         elif name == "NEWLINE":
             flush()
             pending = "nl"
@@ -92,7 +106,8 @@ def apply_commands(text: str, enabled: bool = True) -> str:
             flush()
             append_line(FENCE)
             in_code = True
-        # END_CODE with no open block: ignore
+        elif name == "END_CODE":
+            current.extend(literal.split())  # no open block -> literal words
 
     if in_code:
         close_code()

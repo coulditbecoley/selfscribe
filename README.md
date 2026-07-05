@@ -96,6 +96,9 @@ Structural only by design — no "period"/"comma" word commands, which collide
 with ordinary speech (the cleanup pass handles punctuation). Turn it off with
 `[commands].enabled = false`. The send path never runs commands, so a spoken
 "new line" there is just literal words and can't submit your prompt early.
+Commands are also suppressed when a **terminal** has focus — a newline pasted
+into a shell would submit that line, so dictate structure only takes effect in
+text fields (use the send path for terminals).
 
 ## Start at login (optional)
 

@@ -38,6 +38,20 @@ def test_code_block_unclosed_is_closed_at_end():
     assert apply_commands("here code block some code") == "here\n```\nsome code\n```"
 
 
+def test_code_block_multiline_content():
+    assert apply_commands("code block import os new line import sys end code block") == (
+        "```\nimport os\nimport sys\n```"
+    )
+
+
+def test_empty_code_block_has_no_stray_blank_line():
+    assert apply_commands("code block end code block") == "```\n```"
+
+
+def test_end_code_block_without_open_is_literal():
+    assert apply_commands("please end code block now") == "please end code block now"
+
+
 def test_command_words_inside_larger_words_are_not_matched():
     # 'newline' as a single token is not the 'new line' command
     assert apply_commands("the newline character") == "the newline character"
