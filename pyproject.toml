@@ -38,3 +38,6 @@ select = ["E", "F", "I", "W", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "live: exercises real external services (Groq/Anthropic/Ollama) or hardware",
+]
