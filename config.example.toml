@@ -23,7 +23,9 @@ ollama_model = "llama3.2:1b"
 ollama_url = "http://localhost:11434"
 
 [vocab]
-# Proper nouns seeded into Whisper's initial_prompt so they transcribe right.
+# Proper nouns seeded into Whisper's initial_prompt AND repaired after
+# transcription (case/spacing match + edit-distance-1 on Capitalized words),
+# so they come back in exactly this casing. Keep the list short and personal.
 terms = [
     "Skald",
     "HitHQ",
