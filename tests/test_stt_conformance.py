@@ -11,8 +11,30 @@ from selfscribe.stt import Transcript, get_transcriber, vocab_prompt
 
 
 def test_vocab_prompt_shape():
-    assert vocab_prompt(["SelfScribe", "Coley"]) == "SelfScribe, Coley."
+    assert vocab_prompt(["SelfScribe", "Coley"]) == "This dictation may mention: SelfScribe, Coley."
     assert vocab_prompt([]) == ""
+
+
+def test_vocab_fixes_case_and_spacing():
+    from selfscribe.stt import apply_vocab_fixes
+
+    vocab = ["HitList", "SelfScribe", "Coley", "Claude Code"]
+    assert apply_vocab_fixes("check the Hitlist tracker", vocab) == "check the HitList tracker"
+    assert apply_vocab_fixes("open self scribe now", vocab) == "open SelfScribe now"
+    assert apply_vocab_fixes("ask claude code", vocab) == "ask Claude Code"
+
+
+def test_vocab_fixes_edit_distance_one_capitalized_only():
+    from selfscribe.stt import apply_vocab_fixes
+
+    vocab = ["Coley", "Skald"]
+    assert apply_vocab_fixes("Cooley is building Scald Studio", vocab) == (
+        "Coley is building Skald Studio"
+    )
+    # lowercase common words are never fuzzy-repaired
+    assert apply_vocab_fixes("the holey sock is scaled", vocab) == "the holey sock is scaled"
+    # distance 2 stays untouched
+    assert apply_vocab_fixes("Kohli plays cricket", vocab) == "Kohli plays cricket"
 
 
 def test_get_transcriber_switches_on_config_only(monkeypatch):

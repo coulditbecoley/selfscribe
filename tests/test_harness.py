@@ -34,12 +34,23 @@ CORPUS = [
     ClipCase(
         id="numbers",
         script="The build takes forty five seconds and uses three hundred megabytes",
-        expect=[("forty five", "45"), ("three hundred", "300"), "megabytes"],
+        expect=[("forty five", "45"), ("three hundred", "300"), ("megabytes", "300mb", "300 mb")],
     ),
     ClipCase(
         id="question",
         script="What time is the meeting tomorrow",
         expect=["what time is the meeting tomorrow"],
+    ),
+    # SS-11: custom vocabulary — exact form (case + spacing) must survive.
+    ClipCase(
+        id="vocab_tools",
+        script="Open SelfScribe and check the HitList tracker in Obsidian",
+        exact=["SelfScribe", "HitList", "Obsidian"],
+    ),
+    ClipCase(
+        id="vocab_names",
+        script="Coley is building Skald Studio and the Fenrir wiki",
+        exact=["Coley", "Skald", "Fenrir"],
     ),
 ]
 
@@ -71,3 +82,26 @@ def test_corpus_clip(case, pipeline, tts_wav):
     result = score(case, pipeline(clip).text)
     print(f"\n{result}")
     assert result.passed, str(result)
+
+
+@pytest.mark.live
+def test_vocab_bias_beats_unbiased(tts_wav):
+    """SS-11 AC: with the initial_prompt bias ON, all custom terms transcribe
+    in exact form; without it they come back mangled (or at best equal)."""
+    from selfscribe.stt import vocab_prompt
+    from selfscribe.stt.groq import transcribe
+
+    cfg = load_config()
+    if not cfg.groq_api_key:
+        pytest.skip("no groq key")
+    case = next(c for c in CORPUS if c.id == "vocab_tools")
+    clip = clip_from_wav_bytes(tts_wav(case.script, f"corpus_{case.id}").read_bytes())
+
+    off = transcribe(clip, cfg.groq_api_key, initial_prompt="")
+    on = transcribe(clip, cfg.groq_api_key, initial_prompt=vocab_prompt(cfg.vocab))
+    off_hits = [t for t in case.exact if t in off.text]
+    on_hits = [t for t in case.exact if t in on.text]
+    print(f"\nbias OFF ({len(off_hits)}/3): {off.text!r}")
+    print(f"bias ON  ({len(on_hits)}/3): {on.text!r}")
+    assert len(on_hits) == len(case.exact), f"bias on missed terms: {on.text!r}"
+    assert len(on_hits) >= len(off_hits)
