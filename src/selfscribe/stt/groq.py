@@ -17,6 +17,16 @@ DEFAULT_MODEL = "whisper-large-v3-turbo"
 MAX_TRIES = 3
 BACKOFF_S = 2.0
 
+_client: httpx.Client | None = None
+
+
+def _get_client() -> httpx.Client:
+    """Keep-alive client: skips the TCP+TLS handshake on repeat utterances."""
+    global _client
+    if _client is None:
+        _client = httpx.Client(timeout=30.0)
+    return _client
+
 
 def transcribe(
     clip: Clip,
@@ -36,7 +46,7 @@ def transcribe(
 
     started = time.perf_counter()
     for attempt in range(1, MAX_TRIES + 1):
-        response = httpx.post(
+        response = _get_client().post(
             GROQ_TRANSCRIPTION_URL,
             headers={"Authorization": f"Bearer {api_key}"},
             files={"file": ("clip.wav", clip.wav_bytes(), "audio/wav")},

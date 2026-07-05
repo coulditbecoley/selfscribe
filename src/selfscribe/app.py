@@ -62,6 +62,10 @@ def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> st
         return None
     if cfg.cleanup_enabled(target):
         text = clean_text(text, cfg, target)
+        from selfscribe.stt import apply_vocab_fixes
+
+        # the cleanup LLM may re-case vocab terms; repair the final text too
+        text = apply_vocab_fixes(text, cfg.vocab, fuzzy=cfg.vocab_fuzzy)
     inject(text, press_enter=(target == "send"))
     log.info("[%s] %.0fms %s: %r", target, transcript.ms, transcript.backend, text)
     from selfscribe.telemetry import record_utterance
@@ -75,6 +79,9 @@ class App:
         self.cfg = cfg
         self.recorder = recorder or Recorder()
         self.on_recording_change: object = None  # Callable[[bool], None]
+        # One clip at a time end-to-end: concurrent injections would race on
+        # the shared clipboard inside inject_text's settle/restore sleeps.
+        self._process_lock = threading.Lock()
         self.listener = self._build_listener(cfg.hotkey_mode)
 
     def _build_listener(self, mode: str) -> HotkeyListener:
@@ -89,6 +96,12 @@ class App:
     def set_hotkey_mode(self, mode: str) -> None:
         """Rebuild the listener in the new mode (tray menu switch)."""
         self.listener.stop()
+        if self.recorder.recording:
+            # The old tracker held the active session; without this the mic
+            # stream would stay open and bleed into the next utterance.
+            self.recorder.stop()
+            self._notify_recording(False)
+            log.info("hotkey mode switch discarded an active recording")
         self.cfg.hotkey_mode = mode
         self.listener = self._build_listener(mode)
         self.listener.start()
@@ -129,7 +142,8 @@ class App:
 
     def _process(self, clip: Clip, target: str) -> None:
         try:
-            process_clip(clip, target, self.cfg)
+            with self._process_lock:
+                process_clip(clip, target, self.cfg)
         except TranscriptionError as exc:
             log.error("[%s] %s", target, exc)
             soft_cue()
@@ -145,7 +159,11 @@ class App:
 
 
 class FakeRecorder(Recorder):
-    """Test seam (--fake-audio): 'records' a canned WAV instead of the mic."""
+    """Test seam (--fake-audio): 'records' a canned WAV instead of the mic.
+
+    The canned frames still go through Recorder._finish, so the min-length
+    guard, VAD trim, and discard_reason semantics match the real pipeline.
+    """
 
     def __init__(self, wav_path: str):
         super().__init__()
@@ -157,9 +175,38 @@ class FakeRecorder(Recorder):
     def stop(self) -> Clip | None:
         from pathlib import Path
 
-        from selfscribe.audio import clip_from_wav_bytes
+        from selfscribe.audio import SAMPLE_RATE, clip_from_wav_bytes, resample
 
-        return clip_from_wav_bytes(Path(self._wav_path).read_bytes())
+        clip = clip_from_wav_bytes(Path(self._wav_path).read_bytes())
+        # normalize to 16 kHz like the real mic stream (webrtcvad in _finish
+        # only accepts 8/16/32/48 kHz)
+        pcm = resample(clip.pcm, clip.samplerate, SAMPLE_RATE)
+        self.samplerate = SAMPLE_RATE
+        return self._finish([pcm.reshape(-1, 1)])
+
+
+def _build_tray(app: App):
+    try:
+        from selfscribe.tray import Tray
+
+        tray = Tray(app.cfg, on_quit=app.stop, on_mode_change=app.set_hotkey_mode)
+        app.on_recording_change = tray.set_recording
+        return tray
+    except Exception:
+        log.exception("tray unavailable — running headless")
+        return None
+
+
+def _warm_local_model(cfg: Config) -> None:
+    """Load faster-whisper during idle listening so the first utterance
+    doesn't absorb the multi-second model init."""
+    try:
+        from selfscribe.stt.local import _get_model
+
+        _get_model(cfg.local_model)
+        log.info("local whisper model %s ready", cfg.local_model)
+    except Exception:
+        log.debug("local model preload failed", exc_info=True)
 
 
 def run(fake_audio: str | None = None, use_tray: bool = True) -> int:
@@ -177,29 +224,33 @@ def run(fake_audio: str | None = None, use_tray: bool = True) -> int:
     recorder = FakeRecorder(fake_audio) if fake_audio else None
     app = App(cfg, recorder=recorder)
     app.start()
+    if cfg.stt_backend == "local":
+        threading.Thread(
+            target=_warm_local_model, args=(cfg,), daemon=True, name="selfscribe-warm"
+        ).start()
     print(
         f"selfscribe: listening — dictate={cfg.hotkey_dictate} "
         f"send={cfg.hotkey_send} mode={cfg.hotkey_mode} stt={cfg.stt_backend}",
         flush=True,
     )
 
-    if use_tray:
-        try:
-            from selfscribe.tray import Tray
-
-            tray = Tray(cfg, on_quit=app.stop, on_mode_change=app.set_hotkey_mode)
-            app.on_recording_change = tray.set_recording
-            tray.run()  # blocks until Quit
-            app.stop()
-            print("selfscribe: stopped")
-            return 0
-        except Exception:
-            log.exception("tray unavailable — running headless")
-
+    tray = _build_tray(app) if use_tray else None
     try:
-        while True:
-            time.sleep(1)
+        if tray is not None:
+            try:
+                tray.run()  # blocks until Quit or Ctrl+C
+            except Exception:
+                # pystray backend failures (no shell tray, RDP/service
+                # session) degrade to headless instead of crashing
+                log.exception("tray failed — continuing headless")
+                tray = None
+        if tray is None:
+            while True:
+                time.sleep(1)
     except KeyboardInterrupt:
+        if tray is not None:
+            tray.stop()
+    finally:
         app.stop()
         print("selfscribe: stopped")
     return 0

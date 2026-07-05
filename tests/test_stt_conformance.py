@@ -37,6 +37,36 @@ def test_vocab_fixes_edit_distance_one_capitalized_only():
     assert apply_vocab_fixes("Kohli plays cricket", vocab) == "Kohli plays cricket"
 
 
+def test_vocab_exact_terms_immune_to_fuzzy_rewrite():
+    from selfscribe.stt import apply_vocab_fixes
+
+    # two configured terms within edit distance 1 of each other: a token that
+    # exactly matches one must never be rewritten to the other
+    vocab = ["Coley", "Cooley"]
+    assert apply_vocab_fixes("Cooley said hi", vocab) == "Cooley said hi"
+    assert apply_vocab_fixes("Coley said hi", vocab) == "Coley said hi"
+
+
+def test_vocab_fuzzy_can_be_disabled():
+    from selfscribe.stt import apply_vocab_fixes
+
+    vocab = ["Coley"]
+    assert apply_vocab_fixes("Cooley said hi", vocab, fuzzy=False) == "Cooley said hi"
+    # case repair of direct matches still applies with fuzzy off
+    assert apply_vocab_fixes("coley said hi", vocab, fuzzy=False) == "Coley said hi"
+
+
+def test_vocab_special_char_terms_never_rewrite_ordinary_words():
+    from selfscribe.stt import apply_vocab_fixes
+
+    vocab = [".NET", "C++"]
+    # '.NET' must not turn 'net' into '.NET', 'C++' must not eat every 'C'
+    text = "caught it in the net with plan C in C minor"
+    assert apply_vocab_fixes(text, vocab) == text
+    # and a backslash-containing term must not raise re.error
+    assert apply_vocab_fixes("path stuff", ["term\\with\\slash"]) == "path stuff"
+
+
 def test_get_transcriber_switches_on_config_only(monkeypatch):
     seen = []
 

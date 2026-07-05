@@ -26,7 +26,6 @@ def record_utterance(
         "chars": chars,
         "target": target,
     }
-    assert set(entry) <= ALLOWED_KEYS
     try:
         path = path or telemetry_path()
         path.parent.mkdir(parents=True, exist_ok=True)

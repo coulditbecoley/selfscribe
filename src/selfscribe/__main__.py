@@ -12,6 +12,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Push-to-talk dictation: hotkey -> mic -> Whisper -> text at your cursor.",
     )
     parser.add_argument("--version", action="version", version=f"selfscribe {__version__}")
+    # Bare `selfscribe` (no subcommand) must be structurally identical to
+    # `selfscribe run` — every run flag needs a root-level default.
+    parser.set_defaults(fake_audio=None, no_tray=False)
     sub = parser.add_subparsers(dest="command")
     run_parser = sub.add_parser("run", help="Start the dictation loop (default)")
     run_parser.add_argument(
@@ -37,10 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     if command == "run":
         from selfscribe.app import run
 
-        return run(
-            fake_audio=getattr(args, "fake_audio", None),
-            use_tray=not getattr(args, "no_tray", False),
-        )
+        return run(fake_audio=args.fake_audio, use_tray=not args.no_tray)
     if command == "check":
         from selfscribe.doctor import check
 
@@ -48,14 +48,18 @@ def main(argv: list[str] | None = None) -> int:
     if command == "startup":
         from selfscribe import startup
 
-        if args.action == "install":
-            print(f"start-at-login installed: {startup.install()}")
-        elif args.action == "remove":
-            removed = startup.uninstall()
-            print("start-at-login removed" if removed else "start-at-login was not installed")
-        else:
-            state = "installed" if startup.is_installed() else "not installed"
-            print(f"start-at-login: {state} ({startup.link_path()})")
+        try:
+            if args.action == "install":
+                print(f"start-at-login installed: {startup.install()}")
+            elif args.action == "remove":
+                removed = startup.uninstall()
+                print("start-at-login removed" if removed else "start-at-login was not installed")
+            else:
+                state = "installed" if startup.is_installed() else "not installed"
+                print(f"start-at-login: {state} ({startup.link_path()})")
+        except startup.StartupError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
         return 0
     return 2
 

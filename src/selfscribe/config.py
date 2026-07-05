@@ -48,6 +48,7 @@ class Config:
     ollama_url: str = "http://localhost:11434"
 
     vocab: list[str] = field(default_factory=lambda: list(DEFAULT_VOCAB))
+    vocab_fuzzy: bool = True  # edit-distance-1 repair of capitalized tokens
 
     source_path: Path | None = None
 
@@ -106,6 +107,7 @@ def load_config(path: Path | None = None) -> Config:
         ("ollama_model", "cleanup", "ollama_model", str),
         ("ollama_url", "cleanup", "ollama_url", str),
         ("vocab", "vocab", "terms", list),
+        ("vocab_fuzzy", "vocab", "fuzzy", bool),
     ]:
         value = _get(raw, section, key, expected, path)
         if value is not None:

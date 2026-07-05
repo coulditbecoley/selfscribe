@@ -12,9 +12,20 @@ EXAMPLE_IN = "um so I think we should uh probably ship it on like tuesday you kn
 EXAMPLE_OUT = "I think we should probably ship it on Tuesday."
 
 
+QUOTE_PAIRS = [('"', '"'), ("'", "'"), ("“", "”")]
+
+
 def _strip_enclosing_quotes(text: str) -> str:
-    for quote in ('"', "'", "“”"):
-        if len(text) > 1 and text[0] in quote[0] and text[-1] in quote[-1]:
+    """Strip one pair of quotes wrapping the WHOLE text — not the first and
+    last characters of two separate quoted spans ("a" or "b")."""
+    for opening, closing in QUOTE_PAIRS:
+        if (
+            len(text) > 1
+            and text[0] == opening
+            and text[-1] == closing
+            and opening not in text[1:-1]
+            and closing not in text[1:-1]
+        ):
             return text[1:-1].strip()
     return text
 

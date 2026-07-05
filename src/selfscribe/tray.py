@@ -23,6 +23,11 @@ def dot_image(color: tuple, size: int = 64) -> Image.Image:
     return img
 
 
+# Precomputed: set_recording runs on the hotkey listener thread.
+IDLE_IMAGE = dot_image(IDLE_COLOR)
+RECORDING_IMAGE = dot_image(RECORDING_COLOR)
+
+
 class Tray:
     def __init__(
         self,
@@ -45,27 +50,42 @@ class Tray:
             f"{self.cfg.hotkey_mode} · cleanup {cleanup}"
         )
 
+    def _refresh(self, title: str | None = None) -> None:
+        if self._icon is not None:
+            self._icon.icon = RECORDING_IMAGE if self.recording else IDLE_IMAGE
+            self._icon.title = title or self.status_text()
+
     def set_recording(self, active: bool) -> None:
         self.recording = active
-        if self._icon is not None:
-            self._icon.icon = dot_image(RECORDING_COLOR if active else IDLE_COLOR)
-            self._icon.title = self.status_text()
+        self._refresh()
 
     # --- menu actions ----------------------------------------------------
     def _set_backend(self, backend: str) -> None:
+        error = None
+        if backend == "groq" and not self.cfg.groq_api_key:
+            error = "no Groq key in config"
+        elif backend == "local":
+            try:
+                import faster_whisper  # noqa: F401
+            except ImportError:
+                error = "faster-whisper not installed"
+        if error:
+            self._refresh(title=f"SelfScribe: can't switch to {backend} — {error}")
+            return
         self.cfg.stt_backend = backend
+        self._refresh()
 
     def _set_mode(self, mode: str) -> None:
         self.cfg.hotkey_mode = mode
         if self.on_mode_change:
             self.on_mode_change(mode)
+        self._refresh()
 
     def _cycle_cleanup(self) -> None:
         order = ["", "on", "off"]
         current = order.index(self.cfg.cleanup_override)
         self.cfg.cleanup_override = order[(current + 1) % len(order)]
-        if self._icon is not None:
-            self._icon.title = self.status_text()
+        self._refresh()
 
     # --- pystray plumbing --------------------------------------------------
     def build_icon(self):
@@ -115,9 +135,7 @@ class Tray:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self._quit()),
         )
-        self._icon = pystray.Icon(
-            "selfscribe", dot_image(IDLE_COLOR), self.status_text(), menu
-        )
+        self._icon = pystray.Icon("selfscribe", IDLE_IMAGE, self.status_text(), menu)
         return self._icon
 
     def _quit(self) -> None:

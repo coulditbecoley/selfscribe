@@ -68,3 +68,54 @@ def test_send_path_stays_raw_even_with_cleanup_backend(clip, injections, monkeyp
     process_clip(clip, "dictate", cfg, inject=make_inject(injections))
     assert seen == ["dictate"]  # dictate path cleans
     assert injections[-1] == ("CLEANED", False)
+
+
+def test_cleaned_text_gets_vocab_repair(clip, monkeypatch):
+    """The cleanup LLM may re-case vocab terms; the final text is repaired."""
+    monkeypatch.setattr(
+        app_module,
+        "transcribe_clip",
+        lambda c, cfg: Transcript(text="open HitList now", ms=1.0, backend="groq"),
+    )
+    monkeypatch.setattr(app_module, "clean_text", lambda t, cfg, target: "Open Hitlist now.")
+    calls = []
+    cfg = Config(groq_api_key="k", anthropic_api_key="a", cleanup_backend="haiku")
+    process_clip(clip, "dictate", cfg, inject=make_inject(calls))
+    assert calls == [("Open HitList now.", False)]
+
+
+def test_fake_recorder_goes_through_real_finish(tts_wav, tmp_path):
+    """--fake-audio clips get the same trim/guard semantics as real ones."""
+    import numpy as np
+
+    from selfscribe.app import FakeRecorder
+    from selfscribe.audio import Clip
+
+    speech = tts_wav("testing one two three", "vad_speech")
+    rec = FakeRecorder(str(speech))
+    out = rec.stop()
+    assert out is not None and out.duration_ms > 300
+
+    silent = tmp_path / "silence.wav"
+    silent.write_bytes(Clip(pcm=np.zeros(16000, dtype=np.int16)).wav_bytes())
+    rec = FakeRecorder(str(silent))
+    assert rec.stop() is None
+    assert rec.discard_reason == "silence"
+
+
+def test_fake_recorder_normalizes_odd_samplerates(tts_wav, tmp_path):
+    """webrtcvad only accepts 8/16/32/48 kHz — a 44.1 kHz WAV must not error."""
+    from selfscribe.app import FakeRecorder
+    from selfscribe.audio import Clip, clip_from_wav_bytes, resample
+
+    speech = clip_from_wav_bytes(tts_wav("testing one two three", "vad_speech").read_bytes())
+    hi_rate = 44100
+    hi_pcm = resample(speech.pcm, speech.samplerate, hi_rate)
+    wav_44k = tmp_path / "hi.wav"
+    wav_44k.write_bytes(Clip(pcm=hi_pcm, samplerate=hi_rate).wav_bytes())
+
+    rec = FakeRecorder(str(wav_44k))
+    out = rec.stop()
+    assert out is not None
+    assert out.samplerate == 16000
+    assert out.duration_ms > 300

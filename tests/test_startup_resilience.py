@@ -18,6 +18,19 @@ def test_startup_install_uninstall_roundtrip(tmp_path):
     assert startup.uninstall(tmp_path) is False
 
 
+def test_startup_install_survives_apostrophe_in_path(tmp_path):
+    """Paths like C:\\Users\\O'Brien must not break the PowerShell script."""
+    quoted_dir = tmp_path / "O'Brien"
+    quoted_dir.mkdir()
+    link = startup.install(quoted_dir)
+    assert link.exists()
+    assert startup.uninstall(quoted_dir) is True
+
+
+def test_ps_quote_escapes_apostrophes():
+    assert startup._ps_quote("C:\\Users\\O'Brien") == "'C:\\Users\\O''Brien'"
+
+
 class FlakyRecorder(Recorder):
     """stop() raises once, then yields clips — simulates a device hiccup."""
 

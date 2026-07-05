@@ -46,6 +46,19 @@ def clip_from_wav_bytes(data: bytes) -> Clip:
         return Clip(pcm=pcm, samplerate=wav.getframerate())
 
 
+def resample(pcm: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
+    """Linear resample — fine for speech."""
+    if from_rate == to_rate or len(pcm) == 0:
+        return pcm
+    target_len = int(len(pcm) * to_rate / from_rate)
+    resampled = np.interp(
+        np.linspace(0.0, len(pcm) - 1, target_len),
+        np.arange(len(pcm)),
+        pcm.astype(np.float64),
+    )
+    return resampled.astype(pcm.dtype)
+
+
 def _webrtc_is_speech() -> Callable[[bytes, int], bool]:
     import webrtcvad
 

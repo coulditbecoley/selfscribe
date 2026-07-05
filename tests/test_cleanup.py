@@ -1,22 +1,19 @@
 import httpx
 import pytest
+from conftest import FakeHttpClient, FakeResponse
 
+import selfscribe.cleanup.haiku as haiku_mod
 from selfscribe.cleanup import CleanupError, get_cleaner
 from selfscribe.cleanup.haiku import clean as haiku_clean
+from selfscribe.cleanup.ollama import _strip_enclosing_quotes
 from selfscribe.cleanup.ollama import clean as ollama_clean
 from selfscribe.config import Config
 
 FILLER_WORDS = ("um", "uh", "you know", "i mean")
 
 
-class FakeResponse:
-    def __init__(self, status_code, json_data=None, text=""):
-        self.status_code = status_code
-        self._json = json_data or {}
-        self.text = text
-
-    def json(self):
-        return self._json
+def use_haiku_handler(monkeypatch, handler):
+    monkeypatch.setattr(haiku_mod, "_get_client", lambda: FakeHttpClient(handler))
 
 
 def test_get_cleaner_off_returns_none():
@@ -31,7 +28,7 @@ def test_haiku_request_shape_and_extraction(monkeypatch):
         captured.update(kwargs)
         return FakeResponse(200, {"content": [{"type": "text", "text": " Cleaned. "}]})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    use_haiku_handler(monkeypatch, fake_post)
     out = haiku_clean("um so cleaned", "sk-ant-x")
     assert out == "Cleaned."
     body = captured["json"]
@@ -42,13 +39,22 @@ def test_haiku_request_shape_and_extraction(monkeypatch):
 
 
 def test_haiku_401_and_empty(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: FakeResponse(401))
+    use_haiku_handler(monkeypatch, lambda url, **kw: FakeResponse(401))
     with pytest.raises(CleanupError) as exc:
         haiku_clean("x", "sk-bad")
     assert "401" in str(exc.value)
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: FakeResponse(200, {"content": []}))
+    use_haiku_handler(monkeypatch, lambda url, **kw: FakeResponse(200, {"content": []}))
     with pytest.raises(CleanupError):
         haiku_clean("x", "sk-ant-x")
+
+
+def test_strip_enclosing_quotes_pairs_only():
+    assert _strip_enclosing_quotes('"whole thing quoted"') == "whole thing quoted"
+    assert _strip_enclosing_quotes("“smart quotes”") == "smart quotes"
+    # two separate quoted spans must NOT lose their outer quotes
+    dual = '"ship it" or "hold off"'
+    assert _strip_enclosing_quotes(dual) == dual
+    assert _strip_enclosing_quotes("plain text") == "plain text"
 
 
 def test_haiku_missing_key():
@@ -79,7 +85,7 @@ def test_app_clean_text_falls_back_to_raw(monkeypatch):
     def boom(url, **kw):
         raise httpx.ConnectError("down")
 
-    monkeypatch.setattr(httpx, "post", boom)
+    use_haiku_handler(monkeypatch, boom)
     assert app_module.clean_text("raw words", cfg, "dictate") == "raw words"
 
 

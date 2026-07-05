@@ -1,7 +1,8 @@
-import httpx
 import numpy as np
 import pytest
+from conftest import FakeHttpClient, FakeResponse
 
+import selfscribe.stt.groq as groq_mod
 from selfscribe.audio import SAMPLE_RATE, Clip, clip_from_wav_bytes
 from selfscribe.stt import TranscriptionError
 from selfscribe.stt.groq import transcribe
@@ -11,15 +12,8 @@ def make_clip():
     return Clip(pcm=np.zeros(SAMPLE_RATE, dtype=np.int16))
 
 
-class FakeResponse:
-    def __init__(self, status_code, json_data=None, headers=None, text=""):
-        self.status_code = status_code
-        self._json = json_data or {}
-        self.headers = headers or {}
-        self.text = text
-
-    def json(self):
-        return self._json
+def use_handler(monkeypatch, handler):
+    monkeypatch.setattr(groq_mod, "_get_client", lambda: FakeHttpClient(handler))
 
 
 def test_success_returns_text_and_latency(monkeypatch):
@@ -29,7 +23,7 @@ def test_success_returns_text_and_latency(monkeypatch):
         captured.update(kwargs)
         return FakeResponse(200, {"text": "  hello world  "})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    use_handler(monkeypatch, fake_post)
     result = transcribe(make_clip(), "gsk_x")
     assert result.text == "hello world"
     assert result.backend == "groq"
@@ -40,8 +34,9 @@ def test_success_returns_text_and_latency(monkeypatch):
 
 def test_initial_prompt_hook_is_sent(monkeypatch):
     captured = {}
-    monkeypatch.setattr(
-        httpx, "post", lambda url, **kw: (captured.update(kw), FakeResponse(200, {"text": "x"}))[1]
+    use_handler(
+        monkeypatch,
+        lambda url, **kw: (captured.update(kw), FakeResponse(200, {"text": "x"}))[1],
     )
     transcribe(make_clip(), "gsk_x", initial_prompt="SelfScribe, HitList, Coley")
     assert captured["data"]["prompt"] == "SelfScribe, HitList, Coley"
@@ -57,14 +52,14 @@ def test_429_backs_off_then_succeeds(monkeypatch):
             return FakeResponse(429, headers={"retry-after": "1.5"})
         return FakeResponse(200, {"text": "recovered"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    use_handler(monkeypatch, fake_post)
     result = transcribe(make_clip(), "gsk_x", _sleep=sleeps.append)
     assert result.text == "recovered"
     assert sleeps == [1.5]
 
 
 def test_429_exhausted_gives_one_line_error(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: FakeResponse(429))
+    use_handler(monkeypatch, lambda url, **kw: FakeResponse(429))
     with pytest.raises(TranscriptionError) as exc:
         transcribe(make_clip(), "gsk_x", _sleep=lambda s: None)
     assert "429" in str(exc.value)
@@ -72,7 +67,7 @@ def test_429_exhausted_gives_one_line_error(monkeypatch):
 
 
 def test_401_clear_message(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: FakeResponse(401))
+    use_handler(monkeypatch, lambda url, **kw: FakeResponse(401))
     with pytest.raises(TranscriptionError) as exc:
         transcribe(make_clip(), "gsk_bad")
     assert "401" in str(exc.value)

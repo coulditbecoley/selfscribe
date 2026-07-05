@@ -40,6 +40,46 @@ def test_menu_actions_mutate_live_config():
     assert cfg.cleanup_override == ""
 
 
+def test_backend_switch_refused_without_key():
+    cfg = Config(stt_backend="local", groq_api_key="")
+    tray = make_tray(cfg)
+    tray._set_backend("groq")
+    assert cfg.stt_backend == "local"  # refused: no key, would break every utterance
+
+
+def test_mode_switch_stops_active_recording(monkeypatch):
+    from selfscribe.app import App
+
+    class StubListener:
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(App, "_build_listener", lambda self, mode: StubListener())
+    cfg = Config(groq_api_key="k", hotkey_dictate="f13", hotkey_send="f14")
+
+    class StubRecorder:
+        def __init__(self):
+            self.recording = True
+            self.stopped = 0
+            self.discard_reason = None
+
+        def stop(self):
+            self.recording = False
+            self.stopped += 1
+            return None
+
+    app = App(cfg, recorder=StubRecorder())
+    states = []
+    app.on_recording_change = states.append
+    app.set_hotkey_mode("toggle")
+    assert app.recorder.stopped == 1  # orphaned session closed
+    assert states == [False]
+    assert cfg.hotkey_mode == "toggle"
+
+
 def test_app_notifies_recording_state():
     from selfscribe.app import App, FakeRecorder
 

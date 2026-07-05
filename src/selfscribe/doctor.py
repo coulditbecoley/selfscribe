@@ -8,7 +8,8 @@ OK, FAIL, WARN = "ok  ", "FAIL", "warn"
 
 
 def _line(status: str, area: str, detail: str) -> bool:
-    print(f"{status} {area}: {detail}")
+    # FAIL details go to stderr so scripts capturing diagnostics see them.
+    print(f"{status} {area}: {detail}", file=sys.stderr if status == FAIL else sys.stdout)
     return status != FAIL
 
 
@@ -42,7 +43,8 @@ def check_vad() -> bool:
         from selfscribe.audio import SAMPLE_RATE, trim_silence
 
         silence = np.zeros(SAMPLE_RATE, dtype=np.int16)
-        assert trim_silence(silence, SAMPLE_RATE) is None
+        if trim_silence(silence, SAMPLE_RATE) is not None:  # survives python -O
+            raise RuntimeError("VAD flagged pure silence as speech")
         return _line(OK, "vad", "webrtcvad trims silence")
     except Exception as exc:
         return _line(FAIL, "vad", f"voice activity detection broken ({exc})")
@@ -75,6 +77,8 @@ def check_stt(cfg: Config) -> bool:
 def check_cleanup(cfg: Config) -> bool:
     if cfg.cleanup_backend == "off":
         return _line(OK, "cleanup", "off")
+    if not (cfg.cleanup_enabled("dictate") or cfg.cleanup_enabled("send")):
+        return _line(OK, "cleanup", f"{cfg.cleanup_backend} configured but off for both targets")
     if cfg.cleanup_backend == "haiku":
         if cfg.anthropic_api_key:
             return _line(OK, "cleanup", "haiku (key present)")

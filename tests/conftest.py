@@ -41,3 +41,26 @@ def synth_wav(text: str, name: str | None = None) -> Path:
 @pytest.fixture(scope="session")
 def tts_wav():
     return synth_wav
+
+
+class FakeResponse:
+    """Shared httpx-response double (superset: headers for retry-after tests)."""
+
+    def __init__(self, status_code, json_data=None, headers=None, text=""):
+        self.status_code = status_code
+        self._json = json_data or {}
+        self.headers = headers or {}
+        self.text = text
+
+    def json(self):
+        return self._json
+
+
+class FakeHttpClient:
+    """Stub for the keep-alive clients in stt.groq / cleanup.haiku."""
+
+    def __init__(self, handler):
+        self._handler = handler
+
+    def post(self, url, **kwargs):
+        return self._handler(url, **kwargs)

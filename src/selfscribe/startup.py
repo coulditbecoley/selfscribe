@@ -27,24 +27,37 @@ def _launcher() -> Path:
     return pythonw if pythonw.exists() else Path(sys.executable)
 
 
+class StartupError(Exception):
+    """Shortcut creation failed; message is one printable line."""
+
+
+def _ps_quote(value) -> str:
+    """Single-quoted PowerShell literal; '' escapes embedded apostrophes
+    (paths like C:\\Users\\O'Brien must not break or inject into the script)."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def install(directory: Path | None = None) -> Path:
     link = link_path(directory)
     target = _launcher()
     workdir = target.parent
     script = (
         "$ws = New-Object -ComObject WScript.Shell; "
-        f"$s = $ws.CreateShortcut('{link}'); "
-        f"$s.TargetPath = '{target}'; "
+        f"$s = $ws.CreateShortcut({_ps_quote(link)}); "
+        f"$s.TargetPath = {_ps_quote(target)}; "
         "$s.Arguments = '-m selfscribe run'; "
-        f"$s.WorkingDirectory = '{workdir}'; "
+        f"$s.WorkingDirectory = {_ps_quote(workdir)}; "
         "$s.Save()"
     )
-    subprocess.run(
+    result = subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-        check=True,
         capture_output=True,
+        text=True,
         timeout=30,
     )
+    if result.returncode != 0:
+        raw = (result.stderr or "").strip() or (result.stdout or "").strip() or "unknown error"
+        raise StartupError(f"could not create the startup shortcut: {raw.splitlines()[0]}")
     return link
 
 

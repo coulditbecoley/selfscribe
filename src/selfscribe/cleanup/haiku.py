@@ -8,11 +8,21 @@ ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-haiku-4-5-20251001"
 ANTHROPIC_VERSION = "2023-06-01"
 
+_client: httpx.Client | None = None
+
+
+def _get_client() -> httpx.Client:
+    """Keep-alive client: skips the TCP+TLS handshake on repeat utterances."""
+    global _client
+    if _client is None:
+        _client = httpx.Client(timeout=15.0)
+    return _client
+
 
 def clean(text: str, api_key: str, timeout_s: float = 15.0) -> str:
     if not api_key:
         raise CleanupError("Anthropic API key missing — set [keys].anthropic in your config.")
-    response = httpx.post(
+    response = _get_client().post(
         ANTHROPIC_URL,
         headers={
             "x-api-key": api_key,

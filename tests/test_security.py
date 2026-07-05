@@ -65,29 +65,19 @@ def test_keys_never_reach_logs(monkeypatch, caplog):
     assert "SUPERSECRET" not in caplog.text
 
 
-def test_error_messages_never_embed_key():
-    import httpx
+def test_error_messages_never_embed_key(monkeypatch):
+    from conftest import FakeHttpClient, FakeResponse
 
+    import selfscribe.stt.groq as groq_mod
     from selfscribe.stt.groq import transcribe
 
     secret = "gsk_SUPERSECRET_TEST_VALUE_123456"
-
-    class R:
-        status_code = 401
-        headers = {}
-        text = "unauthorized"
-
-        def json(self):
-            return {}
-
-    original = httpx.post
-    httpx.post = lambda url, **kw: R()
-    try:
-        with pytest.raises(Exception) as exc:
-            transcribe(Clip(pcm=np.zeros(SAMPLE_RATE, dtype=np.int16)), secret)
-        assert secret not in str(exc.value)
-    finally:
-        httpx.post = original
+    monkeypatch.setattr(
+        groq_mod, "_get_client", lambda: FakeHttpClient(lambda url, **kw: FakeResponse(401))
+    )
+    with pytest.raises(Exception) as exc:
+        transcribe(Clip(pcm=np.zeros(SAMPLE_RATE, dtype=np.int16)), secret)
+    assert secret not in str(exc.value)
 
 
 def test_no_audio_files_written_by_pipeline(tmp_path, monkeypatch):
@@ -144,13 +134,12 @@ def test_live_session_leaves_no_secrets_or_audio_traces(tts_wav):
     """AC: grep of all output after a real session shows zero secrets."""
     import os
     import time
-    import tomllib
 
     from pynput import keyboard as pk
 
-    user_cfg_path = Path.home() / ".selfscribe" / "config.toml"
-    keys = tomllib.loads(user_cfg_path.read_text(encoding="utf-8")).get("keys", {})
-    groq_key = keys.get("groq", "")
+    from selfscribe.config import load_config
+
+    groq_key = load_config().groq_api_key
     if not groq_key:
         pytest.skip("no groq key")
 
