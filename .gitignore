@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets — config lives in %USERPROFILE%\.selfscribe\, never here
+config.toml
+.selfscribe/
+.env
+.env.*
+
+# Generated test audio (reproducible via the harness TTS script)
+tests/harness/audio/
+
+# Local telemetry
+*.log
