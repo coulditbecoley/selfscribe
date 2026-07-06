@@ -1,16 +1,19 @@
 """Cleanup via a local Ollama model — fully offline, $0 marginal cost.
 
 Small local models follow demonstrations better than rules, so the request
-carries a one-shot example of the contract (filler out, wording preserved).
+carries a one-shot example of the contract (filler out, wording preserved,
+directive-shaped dictation cleaned not answered) plus the delimited transcript.
 """
 
 import httpx
 
-from selfscribe.cleanup import SYSTEM_PROMPT, CleanupError
-
-EXAMPLE_IN = "um so I think we should uh probably ship it on like tuesday you know"
-EXAMPLE_OUT = "I think we should probably ship it on Tuesday."
-
+from selfscribe.cleanup import (
+    EXAMPLE_IN,
+    EXAMPLE_OUT,
+    SYSTEM_PROMPT,
+    CleanupError,
+    wrap_transcript,
+)
 
 QUOTE_PAIRS = [('"', '"'), ("'", "'"), ("“", "”")]
 
@@ -40,9 +43,9 @@ def clean(text: str, base_url: str, model: str, timeout_s: float = 60.0) -> str:
                 "options": {"temperature": 0.0},
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": EXAMPLE_IN},
+                    {"role": "user", "content": wrap_transcript(EXAMPLE_IN)},
                     {"role": "assistant", "content": EXAMPLE_OUT},
-                    {"role": "user", "content": text},
+                    {"role": "user", "content": wrap_transcript(text)},
                 ],
             },
             timeout=timeout_s,
