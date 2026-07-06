@@ -32,14 +32,27 @@ SYSTEM_PROMPT = (
 EXAMPLE_IN = "um so like can you uh write a manus prompt to fix the domain you know"
 EXAMPLE_OUT = "Can you write a Manus prompt to fix the domain?"
 
-_TAG_RE = re.compile(r"</?transcript>", re.IGNORECASE)
+# Matches an opening/closing transcript tag with optional surrounding
+# whitespace and attributes: <transcript>, </transcript>, < / transcript >,
+# <transcript foo>, </transcript > — the variants a fuzzy LLM would honor.
+_TAG_RE = re.compile(r"<\s*/?\s*transcript\b[^>]*>", re.IGNORECASE)
+
+
+def _strip_tags(text: str) -> str:
+    """Remove transcript tags, re-scanning until stable so overlapping tokens
+    (e.g. '</trans</transcript>cript>') can't reassemble into a live tag."""
+    prev = None
+    while prev != text:
+        prev = text
+        text = _TAG_RE.sub("", text)
+    return text
 
 
 def wrap_transcript(text: str) -> str:
     """Delimit the transcript so directive-shaped dictation reads as data, not
     an instruction. Strips any transcript tags in the text first so its content
     can't break out of the framing (defense against a hostile STT response)."""
-    return f"<transcript>\n{_TAG_RE.sub('', text)}\n</transcript>"
+    return f"<transcript>\n{_strip_tags(text)}\n</transcript>"
 
 
 class CleanupError(Exception):
