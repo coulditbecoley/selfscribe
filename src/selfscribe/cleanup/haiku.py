@@ -2,7 +2,13 @@
 
 import httpx
 
-from selfscribe.cleanup import SYSTEM_PROMPT, CleanupError
+from selfscribe.cleanup import (
+    EXAMPLE_IN,
+    EXAMPLE_OUT,
+    SYSTEM_PROMPT,
+    CleanupError,
+    wrap_transcript,
+)
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-haiku-4-5-20251001"
@@ -34,7 +40,11 @@ def clean(text: str, api_key: str, timeout_s: float = 15.0) -> str:
             "max_tokens": max(1024, len(text)),
             "temperature": 0.0,
             "system": SYSTEM_PROMPT,
-            "messages": [{"role": "user", "content": text}],
+            "messages": [
+                {"role": "user", "content": wrap_transcript(EXAMPLE_IN)},
+                {"role": "assistant", "content": EXAMPLE_OUT},
+                {"role": "user", "content": wrap_transcript(text)},
+            ],
         },
         timeout=timeout_s,
     )
