@@ -113,6 +113,19 @@ Commands are also suppressed when a **terminal** has focus — a newline pasted
 into a shell would submit that line, so dictate structure only takes effect in
 text fields (use the send path for terminals).
 
+## Desktop icon
+
+Create a double-clickable launcher on your Desktop (no console window — it
+opens straight to the tray, with a mic icon):
+
+```powershell
+.venv\Scripts\selfscribe shortcut install   # creates Desktop\SelfScribe.lnk
+.venv\Scripts\selfscribe shortcut remove
+```
+
+Double-clicking it while SelfScribe is already running just tells you so and
+exits — a single-instance guard stops a second copy from grabbing the hotkey.
+
 ## Start at login (optional)
 
 ```powershell

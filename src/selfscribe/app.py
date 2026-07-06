@@ -246,12 +246,21 @@ def _warm_local_model(cfg: Config) -> None:
         log.debug("local model preload failed", exc_info=True)
 
 
-def run(fake_audio: str | None = None, use_tray: bool = True) -> int:
+def run(fake_audio: str | None = None, use_tray: bool = True, single_instance: bool = True) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
+    # Guard the real launcher (skip in --fake-audio dev/test runs) so
+    # double-clicking the desktop icon can't stack a second hotkey listener.
+    if single_instance and not fake_audio:
+        from selfscribe.single_instance import acquire, notify_already_running
+
+        if not acquire():
+            print("selfscribe: already running", file=sys.stderr)
+            notify_already_running()
+            return 0
     try:
         cfg = load_config()
     except ConfigError as exc:
