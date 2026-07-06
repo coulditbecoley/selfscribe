@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from selfscribe.assets import write_ico
-from selfscribe.links import create_shortcut, project_dir, venv_pythonw
+from selfscribe.links import create_shortcut, launcher_dir, venv_pythonw
 
 LINK_NAME = "SelfScribe.lnk"
 
@@ -26,7 +26,7 @@ def link_path(directory: Path | None = None) -> Path:
 def install(directory: Path | None = None) -> Path:
     icon = write_ico()
     return create_shortcut(
-        link_path(directory), venv_pythonw(), "-m selfscribe run", project_dir(), icon=icon
+        link_path(directory), venv_pythonw(), "-m selfscribe run", launcher_dir(), icon=icon
     )
 
 

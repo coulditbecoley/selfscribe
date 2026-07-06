@@ -23,9 +23,11 @@ def venv_pythonw() -> Path:
     return pythonw if pythonw.exists() else Path(sys.executable)
 
 
-def project_dir() -> Path:
-    # src/selfscribe/links.py -> repo root
-    return Path(__file__).resolve().parents[2]
+def launcher_dir() -> Path:
+    """Working directory for the shortcuts: the launcher's own dir (the venv
+    Scripts dir). Stable alongside the interpreter, and cwd doesn't matter to
+    `-m selfscribe run` (it resolves via the installed package)."""
+    return venv_pythonw().parent
 
 
 def _ps_quote(value) -> str:

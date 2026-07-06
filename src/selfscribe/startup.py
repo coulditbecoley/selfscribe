@@ -12,7 +12,7 @@ from selfscribe.links import (  # noqa: F401
     ShortcutError,
     _ps_quote,
     create_shortcut,
-    project_dir,
+    launcher_dir,
     venv_pythonw,
 )
 
@@ -40,7 +40,9 @@ def _launcher() -> Path:
 
 
 def install(directory: Path | None = None) -> Path:
-    return create_shortcut(link_path(directory), venv_pythonw(), "-m selfscribe run", project_dir())
+    return create_shortcut(
+        link_path(directory), venv_pythonw(), "-m selfscribe run", launcher_dir()
+    )
 
 
 def uninstall(directory: Path | None = None) -> bool:
