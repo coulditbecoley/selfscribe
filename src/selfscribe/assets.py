@@ -16,14 +16,14 @@ FG = (255, 255, 255, 255)  # white mic
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
-def render_icon(size: int = 256) -> Image.Image:
+def render_icon(size: int = 256, bg: tuple = BG) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     s = size
 
     # rounded background tile
     pad = round(s * 0.06)
-    d.rounded_rectangle([pad, pad, s - pad, s - pad], radius=round(s * 0.22), fill=BG)
+    d.rounded_rectangle([pad, pad, s - pad, s - pad], radius=round(s * 0.22), fill=bg)
 
     # mic capsule (rounded vertical pill)
     cap_w = round(s * 0.24)

@@ -1,6 +1,7 @@
 """Tray icon + recording indicator.
 
-Gray dot = listening, red dot = recording — visible at a glance. The menu
+The app's mic icon (same art as the desktop/taskbar shortcut): blue tile =
+listening, red tile = recording, visible at a glance. The menu
 exposes the runtime switches (cleanup override, STT backend, hotkey mode)
 and Quit. Backend/cleanup changes just mutate the live Config (the pipeline
 reads it per utterance); hotkey-mode changes rebuild the listener via the
@@ -9,23 +10,13 @@ callback the app provides.
 
 from collections.abc import Callable
 
-from PIL import Image, ImageDraw
+from selfscribe.assets import render_icon
 
-IDLE_COLOR = (110, 110, 110, 255)
 RECORDING_COLOR = (220, 50, 47, 255)
 
-
-def dot_image(color: tuple, size: int = 64) -> Image.Image:
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    pad = size // 8
-    draw.ellipse([pad, pad, size - pad, size - pad], fill=color)
-    return img
-
-
 # Precomputed: set_recording runs on the hotkey listener thread.
-IDLE_IMAGE = dot_image(IDLE_COLOR)
-RECORDING_IMAGE = dot_image(RECORDING_COLOR)
+IDLE_IMAGE = render_icon(64)
+RECORDING_IMAGE = render_icon(64, bg=RECORDING_COLOR)
 
 
 class Tray:

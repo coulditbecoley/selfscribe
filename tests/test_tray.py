@@ -1,5 +1,6 @@
+from selfscribe.assets import render_icon
 from selfscribe.config import Config
-from selfscribe.tray import IDLE_COLOR, RECORDING_COLOR, Tray, dot_image
+from selfscribe.tray import IDLE_IMAGE, RECORDING_COLOR, RECORDING_IMAGE, Tray
 
 
 def make_tray(cfg=None, on_mode=None):
@@ -18,9 +19,15 @@ def test_set_recording_swaps_icon():
     tray = make_tray()
     icon = tray.build_icon()
     tray.set_recording(True)
-    assert icon.icon.tobytes() == dot_image(RECORDING_COLOR).tobytes()
+    assert icon.icon is RECORDING_IMAGE
     tray.set_recording(False)
-    assert icon.icon.tobytes() == dot_image(IDLE_COLOR).tobytes()
+    assert icon.icon is IDLE_IMAGE
+
+
+def test_tray_idle_icon_matches_app_icon():
+    """Tray shows the same mic art as the desktop/taskbar shortcut."""
+    assert IDLE_IMAGE.tobytes() == render_icon(64).tobytes()
+    assert RECORDING_IMAGE.tobytes() == render_icon(64, bg=RECORDING_COLOR).tobytes()
 
 
 def test_menu_actions_mutate_live_config():
