@@ -12,7 +12,15 @@ mode = "hold"                     # "hold" = push-to-talk; "toggle" = press to s
 
 [stt]
 backend = "groq"        # "groq" (fast, ~cents/hr) | "local" (faster-whisper: free, offline)
-local_model = "base.en" # faster-whisper model when backend = "local"
+groq_model = "whisper-large-v3-turbo"  # or "whisper-large-v3": better proper nouns, ~3x the cost
+local_model = "base.en" # faster-whisper model when backend = "local" (also the Groq-failure fallback)
+
+[audio]
+# true: the mic stream stays open while SelfScribe runs, so recording starts
+# instantly and the ~250 ms before the key press is kept (no clipped first
+# word). Windows shows the mic-in-use indicator the whole time.
+# false: the mic opens per press (indicator only while recording).
+keep_open = true
 
 [cleanup]
 backend = "off"         # "haiku" | "ollama" | "off" — engine for the cleanup pass

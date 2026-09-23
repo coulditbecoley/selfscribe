@@ -159,3 +159,17 @@ def test_keys_never_in_repr():
     cfg = Config(groq_api_key="gsk_secret", anthropic_api_key="sk-ant-secret")
     assert "gsk_secret" not in repr(cfg)
     assert "sk-ant-secret" not in repr(cfg)
+
+
+def test_audio_and_groq_model_options(tmp_path):
+    path = write(
+        tmp_path,
+        '[keys]\ngroq = "gsk_x"\n[stt]\ngroq_model = "whisper-large-v3"\n'
+        "[audio]\nkeep_open = false\n",
+    )
+    cfg = load_config(path)
+    assert cfg.groq_model == "whisper-large-v3"
+    assert cfg.keep_mic_open is False
+    defaults = Config()
+    assert defaults.keep_mic_open is True
+    assert defaults.groq_model == "whisper-large-v3-turbo"

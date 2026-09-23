@@ -25,6 +25,11 @@ def _get_client() -> httpx.Client:
     return _client
 
 
+def warm() -> None:
+    """Pre-open the pooled connection while the user is still talking."""
+    _get_client().head(ANTHROPIC_URL, timeout=5.0)
+
+
 def clean(text: str, api_key: str, timeout_s: float = 15.0) -> str:
     if not api_key:
         raise CleanupError("Anthropic API key missing — set [keys].anthropic in your config.")

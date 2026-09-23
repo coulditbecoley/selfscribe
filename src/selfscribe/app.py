@@ -114,7 +114,7 @@ def process_clip(clip: Clip, target: str, cfg: Config, inject=inject_text) -> st
 class App:
     def __init__(self, cfg: Config, recorder: Recorder | None = None):
         self.cfg = cfg
-        self.recorder = recorder or Recorder()
+        self.recorder = recorder or Recorder(keep_open=cfg.keep_mic_open)
         self.on_recording_change: object = None  # Callable[[bool], None]
         # One clip at a time end-to-end: concurrent injections would race on
         # the shared clipboard inside inject_text's settle/restore sleeps.
@@ -152,6 +152,9 @@ class App:
                 log.debug("recording indicator update failed", exc_info=True)
 
     def _on_start(self, target: str) -> None:
+        threading.Thread(
+            target=warm_connections, args=(self.cfg,), daemon=True, name="selfscribe-warm-net"
+        ).start()
         try:
             self.recorder.start()
             self._notify_recording(True)
@@ -234,6 +237,22 @@ def _build_tray(app: App):
         return None
 
 
+def warm_connections(cfg: Config) -> None:
+    """Refresh the pooled HTTPS connections while the user is still talking,
+    so the post-release requests skip a fresh TCP+TLS handshake after idle."""
+    try:
+        if cfg.stt_backend == "groq":
+            from selfscribe.stt import groq
+
+            groq.warm()
+        if cfg.cleanup_backend == "haiku":
+            from selfscribe.cleanup import haiku
+
+            haiku.warm()
+    except Exception:  # best effort: the real request connects on its own
+        log.debug("connection warm-up failed", exc_info=True)
+
+
 def _warm_local_model(cfg: Config) -> None:
     """Load faster-whisper during idle listening so the first utterance
     doesn't absorb the multi-second model init."""
@@ -269,6 +288,11 @@ def run(fake_audio: str | None = None, use_tray: bool = True, single_instance: b
 
     recorder = FakeRecorder(fake_audio) if fake_audio else None
     app = App(cfg, recorder=recorder)
+    if recorder is None and cfg.keep_mic_open:
+        try:
+            app.recorder.open()
+        except Exception:  # no mic yet: the first press retries the open
+            log.warning("could not open the microphone yet", exc_info=True)
     app.start()
     if cfg.stt_backend == "local":
         threading.Thread(
@@ -298,5 +322,6 @@ def run(fake_audio: str | None = None, use_tray: bool = True, single_instance: b
             tray.stop()
     finally:
         app.stop()
+        app.recorder.close()
         print("selfscribe: stopped")
     return 0

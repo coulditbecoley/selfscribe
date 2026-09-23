@@ -89,3 +89,34 @@ def test_no_enter_by_default():
         "text", keys=keys, clipboard=FakeClipboard(), sleep=lambda s: None, terminal_focused=False
     )
     assert ("enter",) not in keys.calls
+
+
+def test_send_presses_enter_before_clipboard_restore():
+    """Enter must not wait out the clipboard-restore delay."""
+    events = []
+
+    class LoggingClipboard(FakeClipboard):
+        def copy(self, text):
+            events.append(("copy", text))
+            super().copy(text)
+
+    class LoggingKeys(FakeKeys):
+        def paste(self, use_shift):
+            events.append(("paste",))
+
+        def enter(self):
+            events.append(("enter",))
+
+    inject_text(
+        "prompt",
+        press_enter=True,
+        keys=LoggingKeys(),
+        clipboard=LoggingClipboard("KEEP"),
+        sleep=lambda s: events.append(("sleep", s)),
+        terminal_focused=True,
+    )
+    order = [e for e in events if e[0] != "sleep"]
+    assert order == [("copy", "prompt"), ("paste",), ("enter",), ("copy", "KEEP")]
+    # total paste -> restore gap is unchanged, so lazy clipboard readers still see the text
+    sleeps_after_paste = [e[1] for e in events[events.index(("paste",)) :] if e[0] == "sleep"]
+    assert abs(sum(sleeps_after_paste) - 0.35) < 1e-9

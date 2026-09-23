@@ -49,6 +49,9 @@ def transcribe(
         audio,
         language="en",
         initial_prompt=initial_prompt or None,
+        # each 30 s window decodes independently: stops the repetition loops
+        # Whisper can fall into on long toggle-mode clips
+        condition_on_previous_text=False,
     )
     text = " ".join(segment.text.strip() for segment in segments).strip()
     elapsed_ms = (time.perf_counter() - started) * 1000

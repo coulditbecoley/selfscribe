@@ -1,8 +1,17 @@
 """Speech-to-text backends. All expose transcribe(clip, ...) -> Transcript."""
 
+import importlib.util
+import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+
+log = logging.getLogger("selfscribe")
+
+
+def local_available() -> bool:
+    """Is the optional faster-whisper backend installed?"""
+    return importlib.util.find_spec("faster_whisper") is not None
 
 
 @dataclass
@@ -14,6 +23,11 @@ class Transcript:
 
 class TranscriptionError(Exception):
     """Transcription failed; message is one printable line for the user."""
+
+
+class BackendUnavailable(TranscriptionError):
+    """Outage-type failure (timeout, unreachable, 5xx, rate limit) where
+    another backend could still succeed. Not raised for a bad key or request."""
 
 
 def vocab_prompt(vocab: list[str]) -> str:
@@ -98,7 +112,19 @@ def get_transcriber(cfg) -> Callable[..., Transcript]:
         from selfscribe.stt import groq as backend_mod
 
         def raw(clip):
-            return backend_mod.transcribe(clip, cfg.groq_api_key, initial_prompt=prompt)
+            try:
+                return backend_mod.transcribe(
+                    clip, cfg.groq_api_key, initial_prompt=prompt, model=cfg.groq_model
+                )
+            except BackendUnavailable as exc:
+                if not local_available():
+                    raise
+                # a network blip shouldn't lose the utterance: finish it
+                # offline (first fallback pays the local model load)
+                log.warning("%s Falling back to local whisper.", exc)
+                from selfscribe.stt import local
+
+                return local.transcribe(clip, cfg.local_model, initial_prompt=prompt)
 
     def transcribe_with_vocab(clip) -> Transcript:
         transcript = raw(clip)

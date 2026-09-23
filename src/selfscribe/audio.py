@@ -6,7 +6,10 @@ so the windowing/padding logic is unit-testable without webrtcvad.
 """
 
 import io
+import threading
+import time
 import wave
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -17,6 +20,8 @@ FRAME_MS = 30  # webrtcvad accepts 10/20/30 ms frames
 MIN_CLIP_MS = 300
 PAD_MS = 120
 VAD_AGGRESSIVENESS = 2
+PREROLL_MS = 250  # audio kept from just before the key press (keep_open only)
+STALE_S = 2.0  # no audio callback for this long -> reopen the stream
 
 
 @dataclass
@@ -99,52 +104,122 @@ class Recorder:
     stop() returns a silence-trimmed Clip, or None with discard_reason set to
     'empty' | 'too_short' | 'silence' — a discarded blip is a soft cue for the
     caller, never an error.
+
+    keep_open=True holds one input stream open for the whole session: start()
+    then just flips a flag (no device open on the hotkey hook thread, which
+    Windows drops if a callback blocks ~300 ms) and the last PREROLL_MS of
+    audio is prepended, so a word begun as the combo lands isn't clipped.
+    keep_open=False opens/closes the device per press (mic indicator only
+    lit while recording).
     """
 
-    def __init__(self, samplerate: int = SAMPLE_RATE, device: int | str | None = None):
+    def __init__(
+        self,
+        samplerate: int = SAMPLE_RATE,
+        device: int | str | None = None,
+        keep_open: bool = False,
+    ):
         self.samplerate = samplerate
         self.device = device
+        self.keep_open = keep_open
         self.discard_reason: str | None = None
         self._frames: list[np.ndarray] = []
+        self._preroll: deque[np.ndarray] = deque()
+        self._preroll_len = 0
+        self._preroll_samples = 0  # pre-roll length at the head of _frames
+        self._recording = False
         self._stream = None
+        self._last_block = 0.0
+        self._lock = threading.Lock()  # audio callback thread vs hotkey thread
 
     @property
     def recording(self) -> bool:
-        return self._stream is not None
+        return self._recording
 
-    def start(self) -> None:
+    def open(self) -> None:
+        """Open the input stream now (startup), or reopen a dead one."""
         import sounddevice as sd
 
-        if self._stream is not None:
-            return
-        self._frames = []
-        self.discard_reason = None
-        self._stream = sd.InputStream(
+        self.close()
+        with self._lock:  # never prepend audio from a previous stream
+            self._preroll.clear()
+            self._preroll_len = 0
+        stream = sd.InputStream(
             samplerate=self.samplerate,
             channels=1,
             dtype="int16",
             device=self.device,
             callback=self._on_block,
         )
-        self._stream.start()
+        stream.start()
+        self._last_block = time.monotonic()
+        self._stream = stream
+
+    def close(self) -> None:
+        stream, self._stream = self._stream, None
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:  # device already gone: nothing left to release
+                pass
+
+    def _stream_dead(self) -> bool:
+        # An unplugged/sleep-resumed device can leave the stream "open" but
+        # silent; no callback for STALE_S means reopen before recording.
+        return (
+            self._stream is None
+            or not self._stream.active
+            or time.monotonic() - self._last_block > STALE_S
+        )
+
+    def start(self) -> None:
+        if self._recording:
+            return
+        if self._stream_dead():
+            self.open()
+        with self._lock:
+            self._frames = list(self._preroll)
+            self._preroll_samples = self._preroll_len
+            self._preroll.clear()
+            self._preroll_len = 0
+            self.discard_reason = None
+            self._recording = True
 
     def _on_block(self, indata, frames, time_info, status) -> None:
-        self._frames.append(indata.copy())
+        block = indata.copy()
+        self._last_block = time.monotonic()
+        with self._lock:
+            if self._recording:
+                self._frames.append(block)
+                return
+            self._preroll.append(block)
+            self._preroll_len += len(block)
+            limit = self.samplerate * PREROLL_MS // 1000
+            while self._preroll and self._preroll_len - len(self._preroll[0]) >= limit:
+                self._preroll_len -= len(self._preroll.popleft())
 
     def stop(self) -> Clip | None:
-        if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
-        return self._finish(self._frames)
+        if self.keep_open and self._recording and self._stream is not None:
+            # Let the driver deliver the audio still in flight at key release
+            # (closing the stream used to drain it). ~60 ms on a USB headset.
+            time.sleep(min(self._stream.latency + 0.03, 0.2))
+        with self._lock:
+            self._recording = False
+            frames, self._frames = self._frames, []
+            preroll, self._preroll_samples = self._preroll_samples, 0
+        if not self.keep_open:
+            self.close()
+        return self._finish(frames, preroll_samples=preroll)
 
-    def _finish(self, frames: list[np.ndarray]) -> Clip | None:
+    def _finish(self, frames: list[np.ndarray], preroll_samples: int = 0) -> Clip | None:
         self._frames = []
         if not frames:
             self.discard_reason = "empty"
             return None
         pcm = np.concatenate(frames).ravel()
-        if len(pcm) * 1000.0 / self.samplerate < MIN_CLIP_MS:
+        # blip guard measures the key press only, not the prepended pre-roll
+        if (len(pcm) - preroll_samples) * 1000.0 / self.samplerate < MIN_CLIP_MS:
             self.discard_reason = "too_short"
             return None
         trimmed = trim_silence(pcm, self.samplerate)

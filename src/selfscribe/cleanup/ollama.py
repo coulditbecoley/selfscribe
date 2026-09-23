@@ -40,6 +40,9 @@ def clean(text: str, base_url: str, model: str, timeout_s: float = 60.0) -> str:
             json={
                 "model": model,
                 "stream": False,
+                # Ollama unloads idle models after 5 min; reloading costs
+                # seconds on the next cleanup. Keep it resident longer.
+                "keep_alive": "30m",
                 "options": {"temperature": 0.0},
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},

@@ -76,7 +76,9 @@ def test_get_transcriber_switches_on_config_only(monkeypatch):
     monkeypatch.setattr(
         groq_mod,
         "transcribe",
-        lambda clip, key, initial_prompt="": seen.append("groq") or Transcript("g", 1, "groq"),
+        lambda clip, key, initial_prompt="", **kw: (
+            seen.append("groq") or Transcript("g", 1, "groq")
+        ),
     )
     monkeypatch.setattr(
         local_mod,
@@ -130,3 +132,47 @@ def test_local_inference_is_offline(speech_clip):
         assert "quick brown fox" in result.text.lower()
     finally:
         socket.socket = real_socket
+
+
+def test_groq_failure_falls_back_to_local(monkeypatch):
+    import selfscribe.stt as stt
+    import selfscribe.stt.groq as groq_mod
+    import selfscribe.stt.local as local_mod
+    from selfscribe.stt import BackendUnavailable, TranscriptionError
+
+    def groq_down(clip, key, **kw):
+        raise BackendUnavailable("Groq timed out after 15s.")
+
+    monkeypatch.setattr(groq_mod, "transcribe", groq_down)
+    monkeypatch.setattr(
+        local_mod, "transcribe", lambda clip, model, initial_prompt="": Transcript("l", 1, "local")
+    )
+    monkeypatch.setattr(stt, "local_available", lambda: True)
+    assert get_transcriber(Config(groq_api_key="k"))(None).backend == "local"
+
+    monkeypatch.setattr(stt, "local_available", lambda: False)
+    with pytest.raises(BackendUnavailable):
+        get_transcriber(Config(groq_api_key="k"))(None)
+
+    # a bad key is a config problem to surface, never masked by the fallback
+    def bad_key(clip, key, **kw):
+        raise TranscriptionError("Groq rejected the API key (401)")
+
+    monkeypatch.setattr(groq_mod, "transcribe", bad_key)
+    monkeypatch.setattr(stt, "local_available", lambda: True)
+    with pytest.raises(TranscriptionError, match="401"):
+        get_transcriber(Config(groq_api_key="k"))(None)
+
+
+def test_groq_model_comes_from_config(monkeypatch):
+    import selfscribe.stt.groq as groq_mod
+
+    seen = {}
+    monkeypatch.setattr(
+        groq_mod,
+        "transcribe",
+        lambda clip, key, initial_prompt="", model="": seen.update(model=model)
+        or Transcript("g", 1, "groq"),
+    )
+    get_transcriber(Config(groq_api_key="k", groq_model="whisper-large-v3"))(None)
+    assert seen["model"] == "whisper-large-v3"

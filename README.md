@@ -63,6 +63,10 @@ Claude Code prompt fires hands-free.
   backend (groq/local), hotkey mode, cleanup override, and quits.
 - **Blip guard**: presses under 300 ms or clips that are all silence are
   discarded with a soft beep — nothing is sent anywhere.
+- **Instant start**: the mic stream stays open while SelfScribe runs, so
+  recording starts the moment the combo lands and the ~250 ms before it is
+  kept (no clipped first word). Windows shows the mic-in-use indicator the
+  whole time; `[audio].keep_open = false` opens the mic per press instead.
 
 ## Backends
 
@@ -71,6 +75,12 @@ Claude Code prompt fires hands-free.
 | Speed (short clip) | ~0.5–0.7 s | ~1–2 s after first load |
 | Cost | ~$0.04/hr of audio | $0 |
 | Privacy | audio → Groq API | never leaves the machine |
+
+If Groq times out, is unreachable, rate-limits, or has a server error and
+the `local` extra is installed, that utterance finishes on local Whisper
+instead of being lost (a bad API key still surfaces as an error).
+`[stt].groq_model = "whisper-large-v3"` trades ~3x the cost for better
+proper nouns.
 
 Fully-offline private mode: `backend = "local"` + `[cleanup].backend =
 "ollama"` (install [Ollama](https://ollama.com), `ollama pull llama3.2:1b`).

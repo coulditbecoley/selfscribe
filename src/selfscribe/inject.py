@@ -27,8 +27,9 @@ TERMINAL_PROCESSES = {
     "wezterm-gui.exe",
 }
 
-PASTE_SETTLE_S = 0.15  # clipboard set -> paste keystroke
-RESTORE_DELAY_S = 0.35  # paste keystroke -> clipboard restore
+PASTE_SETTLE_S = 0.05  # clipboard set -> paste keystroke (copy is synchronous)
+ENTER_DELAY_S = 0.2  # paste keystroke -> Enter, so the app sees paste then submit
+RESTORE_DELAY_S = 0.35  # paste keystroke -> clipboard restore (apps read it lazily)
 
 
 @dataclass
@@ -107,29 +108,36 @@ def inject_text(
     if method == "type":
         keys.type_text(text)
         result = InjectionResult(method="type")
-    else:
-        try:
-            prior = clipboard.paste()
-        except Exception:
-            prior = None
-        use_shift = is_terminal_focused() if terminal_focused is None else terminal_focused
-        clipboard.copy(text)
-        sleep(PASTE_SETTLE_S)
-        try:
-            keys.paste(use_shift)
-            result = InjectionResult(method="paste", used_shift=use_shift)
-        except Exception:
-            keys.type_text(text)
-            result = InjectionResult(method="type")
-        sleep(RESTORE_DELAY_S)
-        if prior is not None:
-            try:
-                clipboard.copy(prior)
-                result.clipboard_restored = True
-            except Exception:
-                pass
+        if press_enter:
+            sleep(ENTER_DELAY_S)
+            keys.enter()
+        return result
 
+    try:
+        prior = clipboard.paste()
+    except Exception:
+        prior = None
+    use_shift = is_terminal_focused() if terminal_focused is None else terminal_focused
+    clipboard.copy(text)
+    sleep(PASTE_SETTLE_S)
+    try:
+        keys.paste(use_shift)
+        result = InjectionResult(method="paste", used_shift=use_shift)
+    except Exception:
+        keys.type_text(text)
+        result = InjectionResult(method="type")
+    # Enter goes out before the clipboard restore: it doesn't read the
+    # clipboard, so the send path no longer waits out RESTORE_DELAY_S first.
+    waited = 0.0
     if press_enter:
-        sleep(0.1)
+        sleep(ENTER_DELAY_S)
         keys.enter()
+        waited = ENTER_DELAY_S
+    sleep(max(0.0, RESTORE_DELAY_S - waited))
+    if prior is not None:
+        try:
+            clipboard.copy(prior)
+            result.clipboard_restored = True
+        except Exception:
+            pass
     return result

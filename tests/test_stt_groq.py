@@ -1,3 +1,4 @@
+import httpx
 import numpy as np
 import pytest
 from conftest import FakeHttpClient, FakeResponse
@@ -76,6 +77,51 @@ def test_401_clear_message(monkeypatch):
 def test_missing_key_rejected_before_network():
     with pytest.raises(TranscriptionError):
         transcribe(make_clip(), "")
+
+
+def test_dropped_connection_retries(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_post(url, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.RemoteProtocolError("server closed the keep-alive connection")
+        return FakeResponse(200, {"text": "ok"})
+
+    use_handler(monkeypatch, fake_post)
+    assert transcribe(make_clip(), "gsk_x").text == "ok"
+    assert calls["n"] == 2
+
+
+def test_timeout_fails_fast_without_retry(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_post(url, **kwargs):
+        calls["n"] += 1
+        raise httpx.ReadTimeout("slow")
+
+    use_handler(monkeypatch, fake_post)
+    with pytest.raises(TranscriptionError) as exc:
+        transcribe(make_clip(), "gsk_x")
+    assert "timed out" in str(exc.value)
+    assert calls["n"] == 1
+
+
+def test_5xx_retries_then_succeeds(monkeypatch):
+    responses = [FakeResponse(503), FakeResponse(200, {"text": "back"})]
+    use_handler(monkeypatch, lambda url, **kw: responses.pop(0))
+    assert transcribe(make_clip(), "gsk_x", _sleep=lambda s: None).text == "back"
+
+
+def test_retry_after_is_capped(monkeypatch):
+    responses = [
+        FakeResponse(429, headers={"retry-after": "120"}),
+        FakeResponse(200, {"text": "x"}),
+    ]
+    sleeps = []
+    use_handler(monkeypatch, lambda url, **kw: responses.pop(0))
+    transcribe(make_clip(), "gsk_x", _sleep=sleeps.append)
+    assert sleeps == [groq_mod.MAX_RETRY_AFTER_S]
 
 
 @pytest.mark.live

@@ -4,6 +4,7 @@ import pytest
 from selfscribe.audio import (
     FRAME_MS,
     MIN_CLIP_MS,
+    PREROLL_MS,
     SAMPLE_RATE,
     Clip,
     Recorder,
@@ -122,3 +123,54 @@ def test_recorder_live_mic_stream():
     assert out is None or out.duration_ms > 0
     if out is None:
         assert rec.discard_reason in ("empty", "too_short", "silence")
+
+
+class FakeStream:
+    active = True
+    latency = 0.0
+
+
+def block(ms, value=0):
+    return np.full((SAMPLE_RATE * ms // 1000, 1), value, dtype=np.int16)
+
+
+def keep_open_recorder():
+    rec = Recorder(keep_open=True)
+    rec._stream = FakeStream()
+    rec._last_block = 1e18  # never stale
+    return rec
+
+
+def test_preroll_is_prepended_and_bounded():
+    rec = keep_open_recorder()
+    for _ in range(20):  # 1 s of idle audio, only ~PREROLL_MS kept
+        rec._on_block(block(50, 1), None, None, None)
+    rec.start()
+    rec._on_block(block(500, 2), None, None, None)
+    frames = rec._frames
+    preroll = np.concatenate(frames[:-1]).ravel()
+    assert set(preroll) == {1}
+    assert PREROLL_MS <= len(preroll) * 1000 / SAMPLE_RATE < PREROLL_MS + 50
+    assert rec._preroll_samples == len(preroll)
+
+
+def test_blip_guard_ignores_preroll(monkeypatch):
+    """A 100 ms tap stays a 'too_short' discard even with pre-roll in front."""
+    rec = keep_open_recorder()
+    for _ in range(10):
+        rec._on_block(block(50), None, None, None)
+    rec.start()
+    rec._on_block(block(100), None, None, None)
+    assert rec.stop() is None
+    assert rec.discard_reason == "too_short"
+    assert rec._stream is not None  # keep_open: stream survives the stop
+
+
+def test_dead_stream_is_reopened_on_start(monkeypatch):
+    rec = keep_open_recorder()
+    rec._stream.active = False
+    opened = []
+    monkeypatch.setattr(rec, "open", lambda: opened.append(1))
+    rec.start()
+    assert opened == [1]
+    assert rec.recording

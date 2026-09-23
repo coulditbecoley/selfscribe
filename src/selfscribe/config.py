@@ -38,7 +38,10 @@ class Config:
     hotkey_mode: str = "hold"  # hold | toggle
 
     stt_backend: str = "groq"  # groq | local
+    groq_model: str = "whisper-large-v3-turbo"
     local_model: str = "base.en"
+
+    keep_mic_open: bool = True  # always-open stream: instant start + pre-roll
 
     cleanup_backend: str = "off"  # haiku | ollama | off
     cleanup_dictate: bool = True
@@ -122,7 +125,9 @@ def load_config(path: Path | None = None) -> Config:
         ("hotkey_send", "hotkeys", "dictate_send", str),
         ("hotkey_mode", "hotkeys", "mode", str),
         ("stt_backend", "stt", "backend", str),
+        ("groq_model", "stt", "groq_model", str),
         ("local_model", "stt", "local_model", str),
+        ("keep_mic_open", "audio", "keep_open", bool),
         ("cleanup_backend", "cleanup", "backend", str),
         ("cleanup_dictate", "cleanup", "dictate", bool),
         ("cleanup_send", "cleanup", "send", bool),
