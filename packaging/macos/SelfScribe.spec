@@ -13,6 +13,7 @@ a = Analysis(
         + collect_submodules("pynput")
         + collect_submodules("pystray")
     ),
+    hookspath=["hooks"],
     excludes=["faster_whisper", "ctranslate2", "torch", "tkinter"],
     cipher=block_cipher,
 )
