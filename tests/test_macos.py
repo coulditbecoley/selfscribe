@@ -77,6 +77,6 @@ def test_first_run_prompts_for_key_on_mac(monkeypatch, tmp_path):
     monkeypatch.setattr(macos, "DEFAULT_CONFIG_PATH", path)
     real_save = macos.save_groq_key
     monkeypatch.setattr(macos, "save_groq_key", lambda key: real_save(key, path))
-    cfg = app_module._load_config_mac_first_run()
+    cfg = app_module._load_config_first_run()
     assert cfg.groq_api_key == "gsk_typed"
     assert config_module.load_config(path).groq_api_key == "gsk_typed"

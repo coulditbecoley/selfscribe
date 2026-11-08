@@ -279,20 +279,35 @@ def _log_to_file() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
-def _load_config_mac_first_run() -> Config:
-    """macOS: a missing Groq key opens a setup dialog instead of failing.
-    Other config errors (and Windows) still raise ConfigError."""
+def _dialog_ui():
+    """Dialog helpers when there's no console to print to: always on macOS,
+    and for the packaged Windows .exe. None when running from a terminal."""
+    if sys.platform == "darwin":
+        from selfscribe import macos
+
+        return macos
+    if sys.platform == "win32" and _log_to_file():
+        from selfscribe import winui
+
+        return winui
+    return None
+
+
+def _load_config_first_run() -> Config:
+    """A missing Groq key opens a setup dialog (Mac app / Windows .exe)
+    instead of failing. Other config errors still raise ConfigError."""
     try:
         return load_config()
     except ConfigError as exc:
-        if sys.platform != "darwin" or "Missing Groq API key" not in str(exc):
+        ui = _dialog_ui()
+        if ui is None or "Missing Groq API key" not in str(exc):
             raise
-        from selfscribe import macos
+        from selfscribe.macos import save_groq_key
 
-        key = macos.ask_groq_key()
+        key = ui.ask_groq_key()
         if not key:
             raise
-        macos.save_groq_key(key)
+        save_groq_key(key)
         log.info("groq key saved to config")
         return load_config()
 
@@ -330,14 +345,13 @@ def run(fake_audio: str | None = None, use_tray: bool = True, single_instance: b
             notify_already_running()
             return 0
     try:
-        cfg = _load_config_mac_first_run()
+        cfg = _load_config_first_run()
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         log.error("%s", exc)
-        if sys.platform == "darwin":
-            from selfscribe import macos
-
-            macos.alert(f"SelfScribe can't start:\n\n{exc}")
+        ui = _dialog_ui()
+        if ui is not None:
+            ui.alert(f"SelfScribe can't start:\n\n{exc}")
         return 1
     if sys.platform == "darwin" and not fake_audio:
         _check_mac_permissions()

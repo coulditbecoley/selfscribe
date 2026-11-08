@@ -19,6 +19,39 @@ Claude Code prompt fires hands-free.
 - No server, no database, no cloud account of its own. Audio lives only in
   memory; telemetry logs latency numbers, never text or audio.
 
+## Download
+
+Grab the latest version from the
+[Releases page](https://github.com/coulditbecoley/selfscribe/releases/latest)
+and pick the zip for your computer:
+
+| Your computer | Download |
+| --- | --- |
+| Windows 10 or 11 | `SelfScribe-Windows-x64.zip` |
+| Mac with an Apple M chip (M1 and newer) | `SelfScribe-macOS-arm64.zip` |
+| Older Intel Mac | `SelfScribe-macOS-x86_64.zip` |
+
+Either way you'll need a free **Groq API key** (sign up at
+[console.groq.com](https://console.groq.com), then API Keys, Create API Key).
+The app asks for it the first time it opens and keeps it only on your computer.
+
+## Windows (download and run)
+
+1. Download `SelfScribe-Windows-x64.zip`, right-click it, **Extract All**,
+   and move the `SelfScribe` folder somewhere permanent (for example
+   `Documents`).
+2. Open the folder and double-click **SelfScribe.exe**. Windows SmartScreen
+   may warn that the app is unrecognized (it isn't code-signed): click
+   **More info**, then **Run anyway**.
+3. Paste your Groq API key when asked.
+4. A mic icon appears in the system tray (bottom right; check the ^ overflow).
+
+**Hotkeys on Windows:** hold **Ctrl+Win**, speak, release: the text pastes
+where your cursor is. Hold **Ctrl+Alt+Win** to paste and press Enter.
+
+**Start at login:** press Win+R, type `shell:startup`, and put a shortcut to
+SelfScribe.exe in that folder. Logs are in `%USERPROFILE%\.selfscribe\selfscribe.log`.
+
 ## macOS (download and run)
 
 For someone who just wants to use it on a Mac. macOS 12 or newer.
@@ -51,13 +84,14 @@ Return (for chat boxes and Claude Code). SelfScribe lives in the menu bar
 **Troubleshooting:** if the hotkey does nothing, Accessibility or Input
 Monitoring is off (step 5). Logs are in `~/.selfscribe/selfscribe.log`.
 
-### Building the Mac app
+### Building the apps
 
-The `macOS build` GitHub Actions workflow builds both zips on every push and
-attaches them to the run (Actions > macOS build > Artifacts). To build on a
-Mac yourself: `bash packaging/macos/build.sh` (output in `packaging/macos/dist/`).
-The bundle is ad-hoc signed but not notarized; notarizing needs an Apple
-Developer account and removes the "Open Anyway" step.
+The `Build apps` GitHub Actions workflow builds all three zips on every push
+(Actions > Build apps > Artifacts). Pushing a `v*` tag also publishes them as
+a GitHub Release. To build locally: `bash packaging/macos/build.sh` on a Mac,
+or `powershell -File packaging/windows/build.ps1` on Windows. Neither app is
+code-signed by a paid certificate: macOS needs "Open Anyway" once (notarizing
+needs an Apple Developer account) and Windows SmartScreen needs "Run anyway".
 
 ## Setup (Windows, from source)
 
