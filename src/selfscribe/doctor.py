@@ -98,7 +98,23 @@ def check_cleanup(cfg: Config) -> bool:
         return _line(FAIL, "cleanup", f"ollama not reachable at {cfg.ollama_url}")
 
 
+def check_permissions() -> bool:
+    """macOS: Accessibility gates both the hotkey hook and the paste keystroke."""
+    from selfscribe.macos import accessibility_trusted
+
+    if accessibility_trusted():
+        return _line(OK, "permissions", "Accessibility granted")
+    return _line(
+        FAIL,
+        "permissions",
+        "Accessibility not granted: System Settings > Privacy & Security > Accessibility "
+        "(and Input Monitoring), turn SelfScribe on, then reopen it",
+    )
+
+
 def check_startup() -> bool:
+    if sys.platform == "darwin":
+        return _line(OK, "startup", "add SelfScribe under System Settings > General > Login Items")
     from selfscribe import startup
 
     state = "installed" if startup.is_installed() else (
@@ -118,6 +134,8 @@ def check() -> int:
         check_cleanup(cfg),
         check_startup(),
     ]
+    if sys.platform == "darwin":
+        results.append(check_permissions())
     if all(results):
         print("all checks passed — hold your hotkey and speak")
         return 0

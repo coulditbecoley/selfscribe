@@ -21,3 +21,6 @@ tests/harness/audio/
 
 # Local telemetry
 *.log
+
+# macOS build output
+packaging/macos/SelfScribe.icns

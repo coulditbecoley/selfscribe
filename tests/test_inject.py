@@ -1,3 +1,8 @@
+import sys
+
+import pytest
+
+from selfscribe import inject as inject_module
 from selfscribe.inject import InjectionResult, inject_text
 
 
@@ -42,6 +47,7 @@ def test_paste_sets_then_restores_clipboard():
     assert keys.calls == [("paste", False)]
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS pastes with Cmd+V everywhere")
 def test_terminal_gets_ctrl_shift_v():
     keys = FakeKeys()
     result = inject_text(
@@ -120,3 +126,20 @@ def test_send_presses_enter_before_clipboard_restore():
     # total paste -> restore gap is unchanged, so lazy clipboard readers still see the text
     sleeps_after_paste = [e[1] for e in events[events.index(("paste",)) :] if e[0] == "sleep"]
     assert abs(sum(sleeps_after_paste) - 0.35) < 1e-9
+
+
+def test_mac_never_uses_shift_even_in_a_terminal(monkeypatch):
+    """macOS terminals take Cmd+V like every other app."""
+    monkeypatch.setattr(inject_module, "IS_MAC", True)
+    keys = FakeKeys()
+    result = inject_text(
+        "ls", keys=keys, clipboard=FakeClipboard(), sleep=lambda s: None, terminal_focused=True
+    )
+    assert result.used_shift is False
+    assert keys.calls == [("paste", False)]
+
+
+def test_mac_terminal_names_are_recognized(monkeypatch):
+    for name in ("terminal", "iterm2", "warp", "ghostty"):
+        monkeypatch.setattr(inject_module, "foreground_process_name", lambda n=name: n)
+        assert inject_module.is_terminal_focused()

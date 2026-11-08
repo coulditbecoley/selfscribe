@@ -1,6 +1,6 @@
 # SelfScribe
 
-Self-hosted, no-frills push-to-talk dictation for Windows — a Wispr Flow
+Self-hosted, no-frills push-to-talk dictation for Windows and macOS. A Wispr Flow
 replacement you own. Hold (or toggle) a hotkey, speak, and the transcript
 lands at your cursor in whatever app has focus, including a Claude Code
 terminal. A second "dictate-and-send" hotkey also presses Enter, so a spoken
@@ -19,7 +19,47 @@ Claude Code prompt fires hands-free.
 - No server, no database, no cloud account of its own. Audio lives only in
   memory; telemetry logs latency numbers, never text or audio.
 
-## Setup
+## macOS (download and run)
+
+For someone who just wants to use it on a Mac. macOS 12 or newer.
+
+1. Download `SelfScribe-macOS-arm64.zip` (Apple Silicon: M1 and newer) or
+   `SelfScribe-macOS-x86_64.zip` (older Intel Macs). Not sure? Apple menu >
+   About This Mac: "Chip: Apple M..." means arm64.
+2. Double-click the zip, then drag **SelfScribe.app** into **Applications**.
+3. Open it. The first time, macOS says it can't verify the developer (the app
+   isn't notarized). Click **Done**, then go to **System Settings > Privacy &
+   Security**, scroll down, click **Open Anyway** next to SelfScribe, and
+   confirm. You only do this once.
+4. Paste your **Groq API key** when asked. It's free: sign up at
+   [console.groq.com](https://console.groq.com), then API Keys, Create API Key.
+   The key is saved only on that Mac, in `~/.selfscribe/config.toml`.
+5. Grant permissions in **System Settings > Privacy & Security**:
+   - **Accessibility**: turn on SelfScribe (needed to paste text).
+   - **Input Monitoring**: turn on SelfScribe (needed to hear the hotkey).
+   - **Microphone**: click Allow the first time you dictate.
+
+   Then quit SelfScribe from its menu-bar mic icon and open it again.
+
+**Hotkeys on Mac:** hold **Control+Command**, speak, release: the text pastes
+where your cursor is. Hold **Control+Option+Command** to paste and press
+Return (for chat boxes and Claude Code). SelfScribe lives in the menu bar
+(no Dock icon); the mic turns red while it's recording.
+
+**Start at login:** System Settings > General > Login Items, add SelfScribe.
+
+**Troubleshooting:** if the hotkey does nothing, Accessibility or Input
+Monitoring is off (step 5). Logs are in `~/.selfscribe/selfscribe.log`.
+
+### Building the Mac app
+
+The `macOS build` GitHub Actions workflow builds both zips on every push and
+attaches them to the run (Actions > macOS build > Artifacts). To build on a
+Mac yourself: `bash packaging/macos/build.sh` (output in `packaging/macos/dist/`).
+The bundle is ad-hoc signed but not notarized; notarizing needs an Apple
+Developer account and removes the "Open Anyway" step.
+
+## Setup (Windows, from source)
 
 1. Python 3.12+ on Windows 11.
 2. Clone and install:

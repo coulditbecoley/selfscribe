@@ -23,10 +23,19 @@ log = logging.getLogger("selfscribe")
 def soft_cue() -> None:
     """Non-intrusive 'that didn't count' signal."""
     try:
-        import winsound
+        if sys.platform == "darwin":
+            import subprocess
 
-        winsound.MessageBeep(winsound.MB_ICONASTERISK)
-    except Exception:  # no audio device / non-Windows: silent is fine
+            subprocess.Popen(
+                ["afplay", "/System/Library/Sounds/Tink.aiff"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            import winsound
+
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+    except Exception:  # no audio device / unsupported platform: silent is fine
         pass
 
 
@@ -265,11 +274,51 @@ def _warm_local_model(cfg: Config) -> None:
         log.debug("local model preload failed", exc_info=True)
 
 
+def _log_to_file() -> bool:
+    """A bundled app (PyInstaller) has no console; log to a file instead."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def _load_config_mac_first_run() -> Config:
+    """macOS: a missing Groq key opens a setup dialog instead of failing.
+    Other config errors (and Windows) still raise ConfigError."""
+    try:
+        return load_config()
+    except ConfigError as exc:
+        if sys.platform != "darwin" or "Missing Groq API key" not in str(exc):
+            raise
+        from selfscribe import macos
+
+        key = macos.ask_groq_key()
+        if not key:
+            raise
+        macos.save_groq_key(key)
+        log.info("groq key saved to config")
+        return load_config()
+
+
+def _check_mac_permissions() -> None:
+    """Explain the macOS permissions once, and let the system prompt for
+    Accessibility. Hotkeys and paste silently do nothing without it."""
+    from selfscribe import macos
+
+    if not macos.accessibility_trusted():
+        macos.alert(macos.PERMISSIONS_HELP)
+        macos.accessibility_trusted(prompt=True)
+
+
 def run(fake_audio: str | None = None, use_tray: bool = True, single_instance: bool = True) -> int:
+    log_kwargs: dict = {}
+    if _log_to_file():
+        from selfscribe.config import DEFAULT_CONFIG_DIR
+
+        DEFAULT_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        log_kwargs["filename"] = str(DEFAULT_CONFIG_DIR / "selfscribe.log")
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
+        **log_kwargs,
     )
     # Guard the real launcher (skip in --fake-audio dev/test runs) so
     # double-clicking the desktop icon can't stack a second hotkey listener.
@@ -281,10 +330,17 @@ def run(fake_audio: str | None = None, use_tray: bool = True, single_instance: b
             notify_already_running()
             return 0
     try:
-        cfg = load_config()
+        cfg = _load_config_mac_first_run()
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
+        log.error("%s", exc)
+        if sys.platform == "darwin":
+            from selfscribe import macos
+
+            macos.alert(f"SelfScribe can't start:\n\n{exc}")
         return 1
+    if sys.platform == "darwin" and not fake_audio:
+        _check_mac_permissions()
 
     recorder = FakeRecorder(fake_audio) if fake_audio else None
     app = App(cfg, recorder=recorder)
