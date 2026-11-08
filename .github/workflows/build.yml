@@ -1,0 +1,85 @@
+name: Build apps
+
+on:
+  push:
+    branches: [main, "feat/macos"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15        # Apple Silicon (M1 and newer)
+          - runner: macos-15-intel  # Intel Macs
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Unit tests
+        run: python -m pytest -q -m "not live"
+      - name: Lint
+        run: python -m ruff check src tests
+      - name: Build SelfScribe.app
+        run: bash packaging/macos/build.sh
+      - name: Smoke test the bundle
+        run: |
+          packaging/macos/dist/SelfScribe.app/Contents/MacOS/SelfScribe --version
+          codesign --verify --deep --strict packaging/macos/dist/SelfScribe.app
+          plutil -p packaging/macos/dist/SelfScribe.app/Contents/Info.plist | grep -q NSMicrophoneUsageDescription
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SelfScribe-macOS-${{ runner.arch }}
+          path: packaging/macos/dist/SelfScribe-macOS-*.zip
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Unit tests
+        run: python -m pytest -q -m "not live"
+      - name: Build SelfScribe.exe
+        run: powershell -ExecutionPolicy Bypass -File packaging/windows/build.ps1
+      - name: Smoke test the bundle
+        shell: pwsh
+        run: |
+          $p = Start-Process packaging/windows/dist/SelfScribe/SelfScribe.exe -ArgumentList "--version" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "SelfScribe.exe --version exited $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SelfScribe-Windows-x64
+          path: packaging/windows/dist/SelfScribe-Windows-x64.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "SelfScribe ${GITHUB_REF_NAME}" \
+            --notes "Download the zip for your computer: SelfScribe-Windows-x64.zip (Windows 10/11), SelfScribe-macOS-arm64.zip (Mac with Apple M chip), SelfScribe-macOS-x86_64.zip (Intel Mac). Setup steps are in the README."

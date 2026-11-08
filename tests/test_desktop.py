@@ -1,4 +1,7 @@
 import struct
+import sys
+
+import pytest
 
 from selfscribe import desktop, startup
 from selfscribe.assets import ICO_SIZES, icon_path, render_icon, write_ico
@@ -29,6 +32,7 @@ def test_icon_path_under_config_dir():
     assert icon_path().parent.name == ".selfscribe"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows shortcut/mutex API")
 def test_desktop_install_uninstall_roundtrip(tmp_path, monkeypatch):
     # keep the generated .ico out of the real home dir
     monkeypatch.setattr(desktop, "write_ico", lambda: tmp_path / "icon.ico")
@@ -41,6 +45,7 @@ def test_desktop_install_uninstall_roundtrip(tmp_path, monkeypatch):
     assert desktop.uninstall(tmp_path) is False
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows shortcut/mutex API")
 def test_desktop_shortcut_carries_icon(tmp_path, monkeypatch):
     icon = tmp_path / "icon.ico"
     write_ico(icon)

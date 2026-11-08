@@ -17,11 +17,15 @@ dependencies = [
     "pyperclip>=1.9.0",
     "pystray>=0.19.5",
     "Pillow>=10.0",
+    # macOS: frontmost-app detection + Accessibility check (pynput/pystray pull Quartz)
+    "pyobjc-framework-Cocoa>=10; sys_platform == 'darwin'",
+    "pyobjc-framework-ApplicationServices>=10; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]
 local = ["faster-whisper>=1.0"]
 dev = ["pytest>=8", "ruff>=0.4"]
+build = ["pyinstaller>=6.10"]
 
 [project.scripts]
 selfscribe = "selfscribe.__main__:main"

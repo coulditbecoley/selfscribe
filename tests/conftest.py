@@ -1,9 +1,10 @@
-"""Shared fixtures. TTS WAV generation via Windows SAPI seeds the audio
+"""Shared fixtures. TTS WAV generation (Windows SAPI, or `say` on macOS) seeds the audio
 corpus used by the VAD tests and the SS-10 accuracy harness (cached on disk,
 gitignored, reproducible)."""
 
 import hashlib
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -28,13 +29,13 @@ def synth_wav(text: str, name: str | None = None) -> Path:
     slug = name or hashlib.sha1(text.encode()).hexdigest()[:12]
     path = AUDIO_DIR / f"{slug}.wav"
     if not path.exists():
-        script = _SYNTH_PS.format(path=str(path), text=text.replace("'", "''"))
-        subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            check=True,
-            capture_output=True,
-            timeout=60,
-        )
+        if sys.platform == "darwin":
+            # macOS: the built-in `say` voice, written as 16 kHz mono 16-bit WAV
+            cmd = ["say", "-o", str(path), "--data-format=LEI16@16000", "--file-format=WAVE", text]
+        else:
+            script = _SYNTH_PS.format(path=str(path), text=text.replace("'", "''"))
+            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", script]
+        subprocess.run(cmd, check=True, capture_output=True, timeout=60)
     return path
 
 

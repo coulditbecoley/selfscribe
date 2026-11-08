@@ -30,7 +30,12 @@ def test_tray_idle_icon_matches_app_icon():
     assert RECORDING_IMAGE.tobytes() == render_icon(64, bg=RECORDING_COLOR).tobytes()
 
 
-def test_menu_actions_mutate_live_config():
+def test_menu_actions_mutate_live_config(monkeypatch):
+    import sys
+    import types
+
+    # the optional local backend may not be installed (CI); stub its import
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.ModuleType("faster_whisper"))
     modes = []
     cfg = Config(groq_api_key="k")
     tray = make_tray(cfg, on_mode=modes.append)

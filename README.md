@@ -1,6 +1,6 @@
 # SelfScribe
 
-Self-hosted, no-frills push-to-talk dictation for Windows — a Wispr Flow
+Self-hosted, no-frills push-to-talk dictation for Windows and macOS. A Wispr Flow
 replacement you own. Hold (or toggle) a hotkey, speak, and the transcript
 lands at your cursor in whatever app has focus, including a Claude Code
 terminal. A second "dictate-and-send" hotkey also presses Enter, so a spoken
@@ -19,7 +19,81 @@ Claude Code prompt fires hands-free.
 - No server, no database, no cloud account of its own. Audio lives only in
   memory; telemetry logs latency numbers, never text or audio.
 
-## Setup
+## Download
+
+Grab the latest version from the
+[Releases page](https://github.com/coulditbecoley/selfscribe/releases/latest)
+and pick the zip for your computer:
+
+| Your computer | Download |
+| --- | --- |
+| Windows 10 or 11 | `SelfScribe-Windows-x64.zip` |
+| Mac with an Apple M chip (M1 and newer) | `SelfScribe-macOS-arm64.zip` |
+| Older Intel Mac | `SelfScribe-macOS-x86_64.zip` |
+
+Either way you'll need a free **Groq API key** (sign up at
+[console.groq.com](https://console.groq.com), then API Keys, Create API Key).
+The app asks for it the first time it opens and keeps it only on your computer.
+
+## Windows (download and run)
+
+1. Download `SelfScribe-Windows-x64.zip`, right-click it, **Extract All**,
+   and move the `SelfScribe` folder somewhere permanent (for example
+   `Documents`).
+2. Open the folder and double-click **SelfScribe.exe**. Windows SmartScreen
+   may warn that the app is unrecognized (it isn't code-signed): click
+   **More info**, then **Run anyway**.
+3. Paste your Groq API key when asked.
+4. A mic icon appears in the system tray (bottom right; check the ^ overflow).
+
+**Hotkeys on Windows:** hold **Ctrl+Win**, speak, release: the text pastes
+where your cursor is. Hold **Ctrl+Alt+Win** to paste and press Enter.
+
+**Start at login:** press Win+R, type `shell:startup`, and put a shortcut to
+SelfScribe.exe in that folder. Logs are in `%USERPROFILE%\.selfscribe\selfscribe.log`.
+
+## macOS (download and run)
+
+For someone who just wants to use it on a Mac. macOS 12 or newer.
+
+1. Download `SelfScribe-macOS-arm64.zip` (Apple Silicon: M1 and newer) or
+   `SelfScribe-macOS-x86_64.zip` (older Intel Macs). Not sure? Apple menu >
+   About This Mac: "Chip: Apple M..." means arm64.
+2. Double-click the zip, then drag **SelfScribe.app** into **Applications**.
+3. Open it. The first time, macOS says it can't verify the developer (the app
+   isn't notarized). Click **Done**, then go to **System Settings > Privacy &
+   Security**, scroll down, click **Open Anyway** next to SelfScribe, and
+   confirm. You only do this once.
+4. Paste your **Groq API key** when asked. It's free: sign up at
+   [console.groq.com](https://console.groq.com), then API Keys, Create API Key.
+   The key is saved only on that Mac, in `~/.selfscribe/config.toml`.
+5. Grant permissions in **System Settings > Privacy & Security**:
+   - **Accessibility**: turn on SelfScribe (needed to paste text).
+   - **Input Monitoring**: turn on SelfScribe (needed to hear the hotkey).
+   - **Microphone**: click Allow the first time you dictate.
+
+   Then quit SelfScribe from its menu-bar mic icon and open it again.
+
+**Hotkeys on Mac:** hold **Control+Command**, speak, release: the text pastes
+where your cursor is. Hold **Control+Option+Command** to paste and press
+Return (for chat boxes and Claude Code). SelfScribe lives in the menu bar
+(no Dock icon); the mic turns red while it's recording.
+
+**Start at login:** System Settings > General > Login Items, add SelfScribe.
+
+**Troubleshooting:** if the hotkey does nothing, Accessibility or Input
+Monitoring is off (step 5). Logs are in `~/.selfscribe/selfscribe.log`.
+
+### Building the apps
+
+The `Build apps` GitHub Actions workflow builds all three zips on every push
+(Actions > Build apps > Artifacts). Pushing a `v*` tag also publishes them as
+a GitHub Release. To build locally: `bash packaging/macos/build.sh` on a Mac,
+or `powershell -File packaging/windows/build.ps1` on Windows. Neither app is
+code-signed by a paid certificate: macOS needs "Open Anyway" once (notarizing
+needs an Apple Developer account) and Windows SmartScreen needs "Run anyway".
+
+## Setup (Windows, from source)
 
 1. Python 3.12+ on Windows 11.
 2. Clone and install:

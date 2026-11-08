@@ -56,6 +56,13 @@ def main(argv: list[str] | None = None) -> int:
         from selfscribe.doctor import check
 
         return check()
+    if command in ("startup", "shortcut") and sys.platform == "darwin":
+        print(
+            "On macOS, drag SelfScribe.app into Applications, then add it under "
+            "System Settings > General > Login Items to start it at login.",
+            file=sys.stderr,
+        )
+        return 1
     if command == "startup":
         from selfscribe import startup
 

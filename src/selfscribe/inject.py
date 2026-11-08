@@ -1,20 +1,23 @@
 """Drop text at the cursor of whatever app has focus.
 
 Primary path: save clipboard -> set text -> simulate paste -> restore
-clipboard. Terminals get Ctrl+Shift+V (Ctrl+V can be literal ^V in some
-shells); everything else gets Ctrl+V. If the paste keystroke can't be sent,
-fall back to typed injection (pynput .type() -> SendInput unicode events),
-which also serves paste-hostile fields. Only non-text clipboard content is
-lost on restore — documented v1 tradeoff.
+clipboard. On Windows, terminals get Ctrl+Shift+V (Ctrl+V can be literal ^V
+in some shells) and everything else gets Ctrl+V. On macOS every app,
+terminals included, takes Cmd+V. If the paste keystroke can't be sent, fall
+back to typed injection (pynput .type()), which also serves paste-hostile
+fields. Only non-text clipboard content is lost on restore — documented v1
+tradeoff.
 """
 
-import ctypes
-import ctypes.wintypes as wt
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
+IS_MAC = sys.platform == "darwin"
+
 TERMINAL_PROCESSES = {
+    # Windows: executable names
     "windowsterminal.exe",
     "openconsole.exe",
     "conhost.exe",
@@ -25,6 +28,15 @@ TERMINAL_PROCESSES = {
     "mintty.exe",
     "alacritty.exe",
     "wezterm-gui.exe",
+    # macOS: app names (NSRunningApplication.localizedName, lowercased)
+    "terminal",
+    "iterm2",
+    "warp",
+    "kitty",
+    "alacritty",
+    "wezterm",
+    "ghostty",
+    "hyper",
 }
 
 PASTE_SETTLE_S = 0.05  # clipboard set -> paste keystroke (copy is synchronous)
@@ -40,7 +52,25 @@ class InjectionResult:
 
 
 def foreground_process_name() -> str:
-    """Executable name (lowercase) of the focused window's process, or ''."""
+    """Lowercase name of the focused app, or ''. Windows: the executable
+    (e.g. 'code.exe'). macOS: the app name (e.g. 'terminal', 'iterm2')."""
+    try:
+        return _foreground_mac() if IS_MAC else _foreground_windows()
+    except Exception:  # missing framework / no GUI session: treat as unknown
+        return ""
+
+
+def _foreground_mac() -> str:
+    from AppKit import NSWorkspace
+
+    app = NSWorkspace.sharedWorkspace().frontmostApplication()
+    return (app.localizedName() or "").lower() if app else ""
+
+
+def _foreground_windows() -> str:
+    import ctypes
+    import ctypes.wintypes as wt
+
     user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
@@ -74,7 +104,10 @@ class PynputKeys:
         self._key = Key
 
     def paste(self, use_shift: bool) -> None:
-        mods = [self._key.ctrl] + ([self._key.shift] if use_shift else [])
+        if IS_MAC:
+            mods = [self._key.cmd]  # Cmd+V everywhere; no shift variant on macOS
+        else:
+            mods = [self._key.ctrl] + ([self._key.shift] if use_shift else [])
         for m in mods:
             self._ctl.press(m)
         self._ctl.press("v")
@@ -117,7 +150,9 @@ def inject_text(
         prior = clipboard.paste()
     except Exception:
         prior = None
-    use_shift = is_terminal_focused() if terminal_focused is None else terminal_focused
+    if terminal_focused is None:
+        terminal_focused = False if IS_MAC else is_terminal_focused()
+    use_shift = terminal_focused and not IS_MAC
     clipboard.copy(text)
     sleep(PASTE_SETTLE_S)
     try:
