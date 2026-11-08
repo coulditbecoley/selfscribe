@@ -1,5 +1,7 @@
 """SS-15: start-at-login shortcut + the loop surviving failures."""
 
+import sys
+
 import numpy as np
 import pytest
 
@@ -9,6 +11,7 @@ from selfscribe.audio import SAMPLE_RATE, Clip, Recorder
 from selfscribe.config import Config
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows shortcut/mutex API")
 def test_startup_install_uninstall_roundtrip(tmp_path):
     link = startup.install(tmp_path)
     assert link.exists()
@@ -18,6 +21,7 @@ def test_startup_install_uninstall_roundtrip(tmp_path):
     assert startup.uninstall(tmp_path) is False
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows shortcut/mutex API")
 def test_startup_install_survives_apostrophe_in_path(tmp_path):
     """Paths like C:\\Users\\O'Brien must not break the PowerShell script."""
     quoted_dir = tmp_path / "O'Brien"
